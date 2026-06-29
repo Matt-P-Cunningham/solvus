@@ -28,7 +28,7 @@ const DEFAULT_OPTIONS = {
 const CROP_CARDS = [
   {key:'Hoagland Solution 1 (1938)',  icon:'🔬',name:'Hoagland (1938)',     desc:'Classic standard, 21k+ citations',  ec:'~2.3'},
   {key:'Sonneveld General (2009)',    icon:'🏭',name:'Sonneveld (2009)',    desc:'Dutch commercial greenhouse',         ec:'~1.9'},
-  {key:'Strawberry — Vegetative',    icon:'🍓',name:'Strawberry Veg',      desc:'Driscoll\'s runner establishment',     ec:'~1.6'},
+  {key:'Strawberry — Vegetative',    icon:'🍓',name:'Strawberry Veg',      desc:'Commercial runner establishment',     ec:'~1.6'},
   {key:'Strawberry — Fruiting',      icon:'🍓',name:'Strawberry Fruit',    desc:'Elevated K:Ca for fruit quality',      ec:'~1.7'},
   {key:'Tomato — Vegetative',        icon:'🍅',name:'Tomato Veg',          desc:'High N/Ca for vigorous growth',        ec:'~2.1'},
   {key:'Tomato — Fruiting',          icon:'🍅',name:'Tomato Fruit',        desc:'Elevated K for fruit set',             ec:'~2.1'},
@@ -107,7 +107,7 @@ export default function App() {
     if(!result) return;
     const all=[...PRODUCTS,...customProducts];
     const rows=[
-      ['FertiCalc — '+recipeName],['Generated',new Date().toLocaleString()],[],
+      ['Solvus — '+recipeName],['Generated',new Date().toLocaleString()],[],
       ['PRODUCT MIX'],['Product','Brand','Tank','Grams','Sol%'],
       ...all.filter(p=>(result.gramsInStock[p.id]||0)>0.01).map(p=>{
         const g=result.gramsInStock[p.id];
@@ -135,10 +135,28 @@ export default function App() {
       {/* Top bar */}
       <header className="topbar">
         {/* Native-style traffic lights — only shown in Electron */}
-
+      {window.electronAPI && (
+        <div style={{display:'flex',gap:8,marginRight:16,flexShrink:0}}>
+          <button onClick={()=>window.electronAPI.closeWindow()}
+            style={{width:12,height:12,borderRadius:'50%',background:'#ff5f57',border:'none',cursor:'pointer',padding:0}}
+            onMouseEnter={e=>e.target.style.background='#ff3b30'}
+            onMouseLeave={e=>e.target.style.background='#ff5f57'}
+          />
+          <button onClick={()=>window.electronAPI.minimizeWindow()}
+            style={{width:12,height:12,borderRadius:'50%',background:'#febc2e',border:'none',cursor:'pointer',padding:0}}
+            onMouseEnter={e=>e.target.style.background='#f59e0b'}
+            onMouseLeave={e=>e.target.style.background='#febc2e'}
+          />
+          <button onClick={()=>window.electronAPI.toggleFullscreen()}
+            style={{width:12,height:12,borderRadius:'50%',background:'#28c840',border:'none',cursor:'pointer',padding:0}}
+            onMouseEnter={e=>e.target.style.background='#16a34a'}
+            onMouseLeave={e=>e.target.style.background='#28c840'}
+          />
+        </div>
+      )}
       <div className="tb-logo">
           <Leaf size={16} className="tb-logo-leaf"/>
-          <span>FertiCalc</span>
+          <span>Solvus</span>
           <span style={{fontSize:11,fontWeight:400,color:'var(--t3)',letterSpacing:0,marginLeft:2}}>Hydroponic Nutrient Calculator</span>
         </div>
         <div className="tb-recipe">
@@ -806,39 +824,6 @@ function SettingsModal({options,setO,setON,targetEC,setTargetEC,applyEC,onClose}
         </div>
         <div className="modal-ft"><button className="btn btn-ghost" onClick={onClose}>Close</button></div>
       </div>
-    </div>
-  );
-}
-
-function TrafficLights() {
-  const [hovered, setHovered] = React.useState(false);
-  if (!window.electronAPI) return null;
-  const sym = (s) => ({
-    display:'flex',alignItems:'center',justifyContent:'center',
-    fontSize:9,fontWeight:700,lineHeight:1,
-    color: hovered ? 'rgba(0,0,0,0.5)' : 'transparent',
-    userSelect:'none',
-  });
-  const btn = (bg) => ({
-    width:12,height:12,borderRadius:'50%',background:bg,
-    border:'0.5px solid rgba(0,0,0,0.15)',cursor:'pointer',
-    padding:0,flexShrink:0,
-  });
-  return (
-    <div
-      style={{display:'flex',alignItems:'center',gap:8,marginRight:16,flexShrink:0,paddingLeft:4}}
-      onMouseEnter={()=>setHovered(true)}
-      onMouseLeave={()=>setHovered(false)}
-    >
-      <button onClick={()=>window.electronAPI.closeWindow()} style={btn('#ff5f57')}>
-        <span style={sym()}>✕</span>
-      </button>
-      <button onClick={()=>window.electronAPI.minimizeWindow()} style={btn('#febc2e')}>
-        <span style={sym()}>−</span>
-      </button>
-      <button onClick={()=>window.electronAPI.toggleFullscreen()} style={btn('#28c840')}>
-        <span style={sym()}>+</span>
-      </button>
     </div>
   );
 }
