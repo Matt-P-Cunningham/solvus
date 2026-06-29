@@ -107,7 +107,7 @@ export default function App() {
     if(!result) return;
     const all=[...PRODUCTS,...customProducts];
     const rows=[
-      ['Solvus — '+recipeName],['Generated',new Date().toLocaleString()],[],
+      ['FertiCalc — '+recipeName],['Generated',new Date().toLocaleString()],[],
       ['PRODUCT MIX'],['Product','Brand','Tank','Grams','Sol%'],
       ...all.filter(p=>(result.gramsInStock[p.id]||0)>0.01).map(p=>{
         const g=result.gramsInStock[p.id];
@@ -136,7 +136,7 @@ export default function App() {
       <header className="topbar">
         <div className="tb-logo">
           <Leaf size={16} className="tb-logo-leaf"/>
-          <span>Solvus</span>
+          <span>FertiCalc</span>
           <span style={{fontSize:11,fontWeight:400,color:'var(--t3)',letterSpacing:0,marginLeft:2}}>Hydroponic Nutrient Calculator</span>
         </div>
         <div className="tb-recipe">

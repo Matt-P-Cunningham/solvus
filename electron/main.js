@@ -9,7 +9,8 @@ function createWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 700,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -20,7 +21,7 @@ function createWindow() {
     show: false,
   });
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => { win.show(); win.focus(); });
 
   if (isDev) {
     win.loadURL('http://localhost:3000');
