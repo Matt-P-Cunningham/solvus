@@ -107,7 +107,7 @@ export default function App() {
     if(!result) return;
     const all=[...PRODUCTS,...customProducts];
     const rows=[
-      ['Solvus — '+recipeName],['Generated',new Date().toLocaleString()],[],
+      ['FertiCalc — '+recipeName],['Generated',new Date().toLocaleString()],[],
       ['PRODUCT MIX'],['Product','Brand','Tank','Grams','Sol%'],
       ...all.filter(p=>(result.gramsInStock[p.id]||0)>0.01).map(p=>{
         const g=result.gramsInStock[p.id];
@@ -134,29 +134,9 @@ export default function App() {
 
       {/* Top bar */}
       <header className="topbar">
-        {/* Native-style traffic lights — only shown in Electron */}
-      {window.electronAPI && (
-        <div style={{display:'flex',gap:8,marginRight:16,flexShrink:0}}>
-          <button onClick={()=>window.electronAPI.closeWindow()}
-            style={{width:12,height:12,borderRadius:'50%',background:'#ff5f57',border:'none',cursor:'pointer',padding:0}}
-            onMouseEnter={e=>e.target.style.background='#ff3b30'}
-            onMouseLeave={e=>e.target.style.background='#ff5f57'}
-          />
-          <button onClick={()=>window.electronAPI.minimizeWindow()}
-            style={{width:12,height:12,borderRadius:'50%',background:'#febc2e',border:'none',cursor:'pointer',padding:0}}
-            onMouseEnter={e=>e.target.style.background='#f59e0b'}
-            onMouseLeave={e=>e.target.style.background='#febc2e'}
-          />
-          <button onClick={()=>window.electronAPI.toggleFullscreen()}
-            style={{width:12,height:12,borderRadius:'50%',background:'#28c840',border:'none',cursor:'pointer',padding:0}}
-            onMouseEnter={e=>e.target.style.background='#16a34a'}
-            onMouseLeave={e=>e.target.style.background='#28c840'}
-          />
-        </div>
-      )}
-      <div className="tb-logo">
+<div className="tb-logo">
           <Leaf size={16} className="tb-logo-leaf"/>
-          <span>Solvus</span>
+          <span>FertiCalc</span>
           <span style={{fontSize:11,fontWeight:400,color:'var(--t3)',letterSpacing:0,marginLeft:2}}>Hydroponic Nutrient Calculator</span>
         </div>
         <div className="tb-recipe">
