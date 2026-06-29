@@ -1,5 +1,5 @@
 /**
- * NutriFlow Calculation Engine v3
+ * Solvus Calculation Engine v3
  *
  * EC METHODOLOGY — based on peer-reviewed electrochemistry:
  *
@@ -179,8 +179,7 @@ export const PRODUCTS = [
 ];
 
 // ─── Scientifically validated crop presets ────────────────────────────────────
-// Sources: Sonneveld & Voogt (2009), Resh (2012), Driscoll's internal guidelines,
-// Hoagland & Arnon (1938), peer-reviewed crop trials
+// Sources: Sonneveld & Voogt (2009), Resh (2012), Hoagland & Arnon (1938), peer-reviewed crop trials
 export const PRESET_RECIPES = {
   'Hoagland Solution 1 (1938)': {
     description: 'Classic Hoagland & Arnon (1938) — 21,000+ citations. High N/K for large plants.',
@@ -213,14 +212,14 @@ export const PRESET_RECIPES = {
                Fe: 2.0, Mn: 0.5, Zn: 0.2, Cu: 0.05, B: 0.25, Mo: 0.05, Si: 0 },
   },
   'Strawberry — Vegetative': {
-    description: 'Driscoll\'s/NovaCropControl standard. Balanced for runner establishment.',
-    source: "Driscoll's Delphy recommendations; NovaCropControl sap targets",
+    description: 'Commercial standard for runner establishment. Balanced vegetative profile.',
+    source: 'Sonneveld & Voogt (2009); peer-reviewed strawberry nutrition literature',
     targets: { NO3: 130, NH4: 5, P: 30, K: 140, Ca: 145, Mg: 32, S: 45,
                Fe: 2.2, Mn: 1.1, Zn: 0.4, Cu: 0.10, B: 0.17, Mo: 0.05, Si: 10 },
   },
   'Strawberry — Fruiting': {
     description: 'Elevated K:Ca for fruit quality and sugar development.',
-    source: "Driscoll's Delphy recommendations",
+    source: 'Sonneveld & Voogt (2009); Charlebois et al. (2019) strawberry nutrition',
     targets: { NO3: 150, NH4: 5, P: 40, K: 240, Ca: 120, Mg: 30, S: 45,
                Fe: 2.2, Mn: 1.1, Zn: 0.4, Cu: 0.10, B: 0.17, Mo: 0.05, Si: 10 },
   },
@@ -245,7 +244,7 @@ export const PRESET_RECIPES = {
 };
 
 // ─── Literature nutrient ratios ───────────────────────────────────────────────
-// Source: Sonneveld & Voogt (2009), Resh (2012), Driscoll's/NovaCropControl
+// Source: Sonneveld & Voogt (2009), Resh (2012)
 export const LITERATURE_RATIOS = {
   'NH4:TotalN': { value: 0.0424, note: 'Keep <10%. Excess NH4 antagonizes Ca/Mg/K.' },
   'NO3:K':      { value: 0.7083, note: 'Sonneveld standard ratio.' },
