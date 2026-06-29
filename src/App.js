@@ -134,7 +134,9 @@ export default function App() {
 
       {/* Top bar */}
       <header className="topbar">
-        <div className="tb-logo">
+        {/* Native-style traffic lights — only shown in Electron */}
+
+      <div className="tb-logo">
           <Leaf size={16} className="tb-logo-leaf"/>
           <span>FertiCalc</span>
           <span style={{fontSize:11,fontWeight:400,color:'var(--t3)',letterSpacing:0,marginLeft:2}}>Hydroponic Nutrient Calculator</span>
@@ -804,6 +806,39 @@ function SettingsModal({options,setO,setON,targetEC,setTargetEC,applyEC,onClose}
         </div>
         <div className="modal-ft"><button className="btn btn-ghost" onClick={onClose}>Close</button></div>
       </div>
+    </div>
+  );
+}
+
+function TrafficLights() {
+  const [hovered, setHovered] = React.useState(false);
+  if (!window.electronAPI) return null;
+  const sym = (s) => ({
+    display:'flex',alignItems:'center',justifyContent:'center',
+    fontSize:9,fontWeight:700,lineHeight:1,
+    color: hovered ? 'rgba(0,0,0,0.5)' : 'transparent',
+    userSelect:'none',
+  });
+  const btn = (bg) => ({
+    width:12,height:12,borderRadius:'50%',background:bg,
+    border:'0.5px solid rgba(0,0,0,0.15)',cursor:'pointer',
+    padding:0,flexShrink:0,
+  });
+  return (
+    <div
+      style={{display:'flex',alignItems:'center',gap:8,marginRight:16,flexShrink:0,paddingLeft:4}}
+      onMouseEnter={()=>setHovered(true)}
+      onMouseLeave={()=>setHovered(false)}
+    >
+      <button onClick={()=>window.electronAPI.closeWindow()} style={btn('#ff5f57')}>
+        <span style={sym()}>✕</span>
+      </button>
+      <button onClick={()=>window.electronAPI.minimizeWindow()} style={btn('#febc2e')}>
+        <span style={sym()}>−</span>
+      </button>
+      <button onClick={()=>window.electronAPI.toggleFullscreen()} style={btn('#28c840')}>
+        <span style={sym()}>+</span>
+      </button>
     </div>
   );
 }

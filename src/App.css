@@ -1,4 +1,4 @@
-/* ─── NutriFlow Design System ───────────────────────────────── */
+/* ─── Solvus Design System ───────────────────────────────── */
 :root {
   --bg:       #f2f4f7;
   --surface:  #ffffff;
@@ -51,18 +51,21 @@ body {
 
 /* ── Top bar ────────────────────────────────────────────────── */
 .topbar {
+  -webkit-app-region: drag;
   height: 48px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 20px 0 80px;
+  padding: 0 20px 0 80px; /* 90px left = space for traffic lights on Mac */
+  gap: 0;
   flex-shrink: 0;
   position: relative;
   z-index: 20;
-  -webkit-app-region: drag;
+  -webkit-app-region: drag; /* makes topbar draggable as a window handle */
 }
 .topbar * { -webkit-app-region: no-drag; }
+.tb-logo { margin-left: 68px; } /* but interactive elements still clickable */
 
 .tb-logo {
   display: flex;
@@ -168,7 +171,8 @@ body {
 .stepper-bar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  padding: 0 20px 0 90px;
+  padding: 0 20px;
+  flex-shrink: 0;
 }
 .stepper {
   display: flex;
