@@ -95,7 +95,18 @@ function createWindow() {
     },
   });
 
-  win.once('ready-to-show', () => win.show());
+  // macOS/Electron quirk: hiddenInset + a custom trafficLightPosition can
+  // render the traffic-light buttons blank/white until a hover forces a
+  // repaint, on some macOS versions. Explicitly re-asserting button
+  // visibility after the window is actually shown forces a correct native
+  // redraw, which titleBarStyle alone doesn't reliably trigger.
+  win.once('ready-to-show', () => {
+    win.show();
+    if (process.platform === 'darwin') win.setWindowButtonVisibility(true);
+  });
+  if (process.platform === 'darwin') {
+    win.on('focus', () => win.setWindowButtonVisibility(true));
+  }
 
   if (isDev) {
     win.loadURL('http://localhost:3000');
