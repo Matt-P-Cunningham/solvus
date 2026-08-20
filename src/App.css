@@ -525,7 +525,9 @@ body {
 .td-pb  { font-size: 11px; color: var(--t3); }
 
 .g-inp {
-  width: 80px;
+  width: 100%;
+  min-width: 110px;
+  max-width: 150px;
   background: var(--s1);
   border: 1px solid var(--border);
   border-radius: 6px;

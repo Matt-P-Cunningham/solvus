@@ -420,8 +420,9 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
           <div className="tank-kg">{total>0?units.formatMass(total)+' total':''}</div>
         </div>
         <div className="card" style={{overflow:'hidden',marginBottom:16}}>
-          <table className="tbl">
-            <thead><tr><th style={{width:'40%'}}>Product</th><th className="r">Auto ({units.smallMassUnitLabel})</th><th className="r">Override ({units.smallMassUnitLabel})</th><th className="r">Sol%</th></tr></thead>
+          <div style={{overflowX:'auto'}}>
+          <table className="tbl" style={{minWidth:540}}>
+            <thead><tr><th style={{width:'34%',minWidth:150}}>Product</th><th className="r" style={{minWidth:90}}>Auto ({units.smallMassUnitLabel})</th><th className="r" style={{minWidth:130}}>Override ({units.smallMassUnitLabel})</th><th className="r" style={{minWidth:60}}>Sol%</th></tr></thead>
             <tbody>
               {rows.map(p=>{
                 const auto=result?.gramsInStock[p.id]||0;
@@ -448,6 +449,7 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
               })}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     );
