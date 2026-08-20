@@ -216,6 +216,38 @@ function AppInner() {
   );
 }
 
+// ─── Product split percentage inputs ───────────────────────────
+const sumSplit = split => Object.values(split).reduce((a,b)=>a+(b||0),0);
+
+function SplitField({label,value,onChange}) {
+  const pct = Math.round((value||0)*1000)/10;
+  return (
+    <div className="field" style={{marginBottom:10}}>
+      <label className="field-label" dangerouslySetInnerHTML={{__html:label}}/>
+      <div className="split-row">
+        <input className="input" type="number" min="0" max="100" step="1" value={pct}
+          onChange={e=>onChange((parseFloat(e.target.value)||0)/100)}/>
+        <span className="split-pct">%</span>
+      </div>
+    </div>
+  );
+}
+
+// Per-element running total for a group of products split to supply the same
+// target (e.g. Fe via EDDHA/DTPA/EDTA) — flags under- and over-100% cases.
+function AccountedFor({element,total}) {
+  const pct = Math.round(total*1000)/10;
+  const gap = Math.round(Math.abs(1-total)*1000)/10;
+  const cls = pct > 100.05 ? 'af-over' : pct < 99.95 ? 'af-under' : 'af-ok';
+  return (
+    <div className={`accounted-for ${cls}`}>
+      <span className="af-formula">{element} = {pct}% accounted for</span>
+      {cls==='af-under' && <span className="af-gap"> — {gap}% unassigned</span>}
+      {cls==='af-over'  && <span className="af-gap"> — {gap}% over</span>}
+    </div>
+  );
+}
+
 // ─── Step 1: System ───────────────────────────────────────────
 function StepSystem({options,setO,setON,units,next}) {
   const round=v=>Math.round(v*10000)/10000;
@@ -251,31 +283,25 @@ function StepSystem({options,setO,setON,units,next}) {
         <div className="card-title"><FlaskConical size={12}/> Product splits</div>
         <div className="grid-3">
           <div>
-            <div className="section-label" style={{marginBottom:10}}>Iron source<span style={{fontSize:10,color:'var(--t4)',fontWeight:400,textTransform:'none',letterSpacing:0,marginLeft:4}}>(must sum to 1)</span></div>
+            <div className="section-label" style={{marginBottom:10}}>Iron source</div>
             {[['EDDHA','EDDHA (pH 4–9)'],['DTPA','DTPA (pH 5–7.5)'],['EDTA','EDTA (pH &lt;6.5)']].map(([k,l])=>(
-              <div className="field" key={k} style={{marginBottom:10}}>
-                <label className="field-label" dangerouslySetInnerHTML={{__html:l}}/>
-                <input className="input" type="number" min="0" max="1" step="0.05" value={options.ironSplit[k]} onChange={e=>setON('ironSplit',k,e.target.value)}/>
-              </div>
+              <SplitField key={k} label={l} value={options.ironSplit[k]} onChange={v=>setON('ironSplit',k,v)}/>
             ))}
+            <AccountedFor element="Fe" total={sumSplit(options.ironSplit)}/>
           </div>
           <div>
             <div className="section-label" style={{marginBottom:10}}>Magnesium</div>
             {[['sulfate','MgSO₄ — Magnesium sulfate'],['nitrate','Mg(NO₃)₂ — Magnesium nitrate']].map(([k,l])=>(
-              <div className="field" key={k} style={{marginBottom:10}}>
-                <label className="field-label">{l}</label>
-                <input className="input" type="number" min="0" max="1" step="0.05" value={options.magSplit[k]} onChange={e=>setON('magSplit',k,e.target.value)}/>
-              </div>
+              <SplitField key={k} label={l} value={options.magSplit[k]} onChange={v=>setON('magSplit',k,v)}/>
             ))}
+            <AccountedFor element="Mg" total={sumSplit(options.magSplit)}/>
           </div>
           <div>
             <div className="section-label" style={{marginBottom:10}}>Potassium</div>
             {[['nitrate','KNO₃ — Potassium nitrate'],['sulfate','K₂SO₄ — Potassium sulfate']].map(([k,l])=>(
-              <div className="field" key={k} style={{marginBottom:10}}>
-                <label className="field-label">{l}</label>
-                <input className="input" type="number" min="0" max="1" step="0.05" value={options.kSplit[k]} onChange={e=>setON('kSplit',k,e.target.value)}/>
-              </div>
+              <SplitField key={k} label={l} value={options.kSplit[k]} onChange={v=>setON('kSplit',k,v)}/>
             ))}
+            <AccountedFor element="K" total={sumSplit(options.kSplit)}/>
             <div className="section-label" style={{marginBottom:8,marginTop:6}}>Options</div>
             <label className="toggle-row"><span>Use ammonium sulfate for NH₄</span><input type="checkbox" checked={options.useAmmoniumSulfate} onChange={e=>setO('useAmmoniumSulfate',e.target.checked)}/></label>
             <label className="toggle-row"><span>Include potassium silicate</span><input type="checkbox" checked={options.useSilica} onChange={e=>setO('useSilica',e.target.checked)}/></label>
