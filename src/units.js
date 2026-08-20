@@ -121,6 +121,9 @@ function makeUnitsApi(system, setSystem, toggle) {
   const massFromFieldValue = val => system === 'imperial' ? (parseFloat(val) || 0) * OZ_TO_G : (parseFloat(val) || 0);
   const densityToFieldValue = gPerMl => densityToDisplay(gPerMl, system).value;
   const densityFromFieldValue = val => displayDensityToGPerMl(val, system);
+  // Bag sizes are large-scale (25-50lb bags) so use the kg/lb pair, not g/oz.
+  const bagSizeToFieldValue = grams => system === 'imperial' ? grams / LB_TO_G : grams / 1000;
+  const bagSizeFromFieldValue = val => system === 'imperial' ? (parseFloat(val) || 0) * LB_TO_G : (parseFloat(val) || 0) * 1000;
 
   return {
     system, setSystem, toggle,
@@ -129,5 +132,6 @@ function makeUnitsApi(system, setSystem, toggle) {
     volumeToFieldValue, volumeFromFieldValue,
     massToFieldValue, massFromFieldValue,
     densityToFieldValue, densityFromFieldValue,
+    bagSizeToFieldValue, bagSizeFromFieldValue,
   };
 }

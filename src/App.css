@@ -521,6 +521,7 @@ body {
 .tbl tr:hover td { background: var(--s1); }
 .tbl .r { text-align: right; font-variant-numeric: tabular-nums; }
 .td-dim { color: var(--t3); font-size: 11.5px; }
+.td-bag { font-size: 10.5px; color: var(--teal-dk); font-weight: 600; margin-top: 1px; }
 .td-pn  { font-weight: 500; color: var(--t0); font-size: 13px; }
 .td-pb  { font-size: 11px; color: var(--t3); }
 

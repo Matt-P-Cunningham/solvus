@@ -10,7 +10,7 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tool
 import {
   solveRecipe, NUTRIENTS, PRODUCTS, PRESET_RECIPES,
   LITERATURE_RATIOS, MULDERS_INTERACTIONS, estimateEC, scaleTargetsToEC,
-  classifyProduct, checkTankDrop
+  classifyProduct, checkTankDrop, computeBagMath
 } from './engine';
 import { UnitsProvider, useUnits } from './units';
 import './App.css';
@@ -48,9 +48,20 @@ const STEPS = [
 ];
 const MULDER_KEYS  = ['N','P','K','Ca','Mg','S','Fe','Mn','Zn','Cu','B','Mo'];
 const MULDER_NAMES = {N:'Nitrogen',P:'Phosphorus',K:'Potassium',Ca:'Calcium',Mg:'Magnesium',S:'Sulfur',Fe:'Iron',Mn:'Manganese',Zn:'Zinc',Cu:'Copper',B:'Boron',Mo:'Molybdenum'};
-const EMPTY_PROD   = {id:'',name:'',brand:'',tank:'B',solubility:'',composition:{NO3:0,NH4:0,P:0,K:0,Ca:0,Mg:0,S:0,Fe:0,Mn:0,Zn:0,Cu:0,B:0,Mo:0,Si:0}};
+const EMPTY_PROD   = {id:'',name:'',brand:'',tank:'B',solubility:'',bagSize:'',composition:{NO3:0,NH4:0,P:0,K:0,Ca:0,Mg:0,S:0,Fe:0,Mn:0,Zn:0,Cu:0,B:0,Mo:0,Si:0}};
 
 const f = (v,d=1) => (v===null||v===undefined||isNaN(v)) ? '—' : Number(v).toFixed(d);
+
+// Built-in products edited via the Products modal are saved into
+// customProducts under their original id (see saveProduct) rather than
+// mutating the imported PRODUCTS const — merge them back in here so an
+// edited built-in overrides its original instead of appearing twice.
+const mergeProducts = customProducts => {
+  const overrides = new Map(customProducts.map(p=>[p.id,p]));
+  const builtins = PRODUCTS.map(p => overrides.get(p.id) || p);
+  const newOnes = customProducts.filter(p => !PRODUCTS.some(bp=>bp.id===p.id));
+  return [...builtins, ...newOnes];
+};
 
 // ─── App root ─────────────────────────────────────────────────
 export default function App() {
@@ -113,7 +124,7 @@ function AppInner() {
   };
   const exportCSV = () => {
     if(!result) return;
-    const all=[...PRODUCTS,...customProducts];
+    const all=mergeProducts(customProducts);
     const rows=[
       ['FertiCalc — '+recipeName],['Generated',new Date().toLocaleString()],[],
       ['PRODUCT MIX'],['Product','Brand','Tank',`Amount (${units.smallMassUnitLabel})`,'Sol%'],
@@ -407,8 +418,18 @@ function NC({n,val,onChange,del}) {
   );
 }
 
+// Renders a computeBagMath() result as "N bags" / "N bags - X g" / "N bags + X g",
+// never a fractional count.
+function BagMathLabel({bagMath,units}) {
+  if (!bagMath) return null;
+  const s = n => n===1 ? '' : 's';
+  if (bagMath.mode==='exact') return <div className="td-bag">{bagMath.bags} bag{s(bagMath.bags)}</div>;
+  if (bagMath.mode==='roundUp') return <div className="td-bag">{bagMath.bags} bag{s(bagMath.bags)} - {units.formatSmallMass(bagMath.shortfall)}</div>;
+  return <div className="td-bag">{bagMath.bags} bag{s(bagMath.bags)} + {units.formatSmallMass(bagMath.remainder)}</div>;
+}
+
 // ─── One draggable product row, shared by all three tank zones ────────────
-function MixRow({p,auto,ov,ovField,sol,sc,units,caution,suggestedZone,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onReset}) {
+function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,suggestedZone,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onReset}) {
   return (
     <tr draggable className={`mix-row ${sol&&sol>0.8?'row-warn':''}`}
       onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -421,7 +442,10 @@ function MixRow({p,auto,ov,ovField,sol,sc,units,caution,suggestedZone,onSuggesti
           <button className="suggest-chip" onClick={onSuggestionClick}>Suggested: Tank {suggestedZone} (lighter)</button>
         )}
       </td>
-      <td className="r td-dim">{auto>0.01?units.massToFieldValue(auto).toFixed(1):'—'}</td>
+      <td className="r td-dim">
+        {auto>0.01?units.massToFieldValue(auto).toFixed(1):'—'}
+        <BagMathLabel bagMath={bagMath} units={units}/>
+      </td>
       <td style={{textAlign:'right',paddingRight:6}}>
         <div className="ov-cell">
           <input type="number" min="0" step="0.1"
@@ -442,7 +466,7 @@ function MixRow({p,auto,ov,ovField,sol,sc,units,caution,suggestedZone,onSuggesti
 function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTankOverrides,customProducts,setStep,notify,units}) {
   const hasOv=Object.keys(manualGrams).length>0;
   const hasTankOv=Object.keys(tankOverrides).length>0;
-  const all=[...PRODUCTS,...customProducts];
+  const all=mergeProducts(customProducts);
   const [dragOverZone,setDragOverZone]=useState(null);
   const [tankMsg,setTankMsg]=useState(null);
 
@@ -521,8 +545,9 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
                 const ovField=ov!==''?units.massToFieldValue(parseFloat(ov)||0):'';
                 const caution = isFlex ? null : classifyProduct(p.composition).caution;
                 const suggestedZone = isFlex ? (totalA<=totalB?'A':'B') : null;
+                const bagMath = p.bagSize ? computeBagMath(g, p.bagSize) : null;
                 return (
-                  <MixRow key={p.id} p={p} auto={auto} ov={ov} ovField={ovField} sol={sol} sc={sc} units={units} caution={caution}
+                  <MixRow key={p.id} p={p} auto={auto} ov={ov} ovField={ovField} sol={sol} sc={sc} units={units} caution={caution} bagMath={bagMath}
                     suggestedZone={suggestedZone}
                     onSuggestionClick={()=>handleDrop(p.id,suggestedZone)}
                     onDragStart={e=>e.dataTransfer.setData('text/plain',p.id)}
@@ -824,7 +849,7 @@ function LivePanel({result,targets}) {
 function ProductsModal({result,options,customProducts,setCustomProducts,notify,onClose,units}) {
   const [search,setSearch]=useState('');
   const [editing,setEditing]=useState(null);
-  const all=[...PRODUCTS,...customProducts];
+  const all=mergeProducts(customProducts);
   const isCustom=id=>!PRODUCTS.find(p=>p.id===id);
   const filtered=all.filter(p=>p.name.toLowerCase().includes(search.toLowerCase())||(p.brand||'').toLowerCase().includes(search.toLowerCase()));
   const sv=options?.stockVolumeLiters||189;
@@ -851,7 +876,7 @@ function ProductsModal({result,options,customProducts,setCustomProducts,notify,o
         </div>
         <div style={{overflowY:'auto',maxHeight:'72vh'}}>
           <table className="pt">
-            <thead><tr><th>Product</th><th>Brand</th><th>Tank</th><th>Composition</th><th className="r">Solubility</th><th className="r">In recipe</th><th className="r">Sol%</th><th></th></tr></thead>
+            <thead><tr><th>Product</th><th>Brand</th><th>Tank</th><th>Composition</th><th className="r">Solubility</th><th className="r">Bag size</th><th className="r">In recipe</th><th className="r">Sol%</th><th></th></tr></thead>
             <tbody>
               {filtered.map(p=>{
                 const g=result?.gramsInStock[p.id]||0;
@@ -863,6 +888,7 @@ function ProductsModal({result,options,customProducts,setCustomProducts,notify,o
                     <td><span className={`tank-pill tp-${p.tank.toLowerCase()}`}>{p.tank}</span></td>
                     <td><div className="comp-pills">{Object.entries(p.composition).filter(([,v])=>v>0).map(([k,v])=><span key={k} className="comp-pill">{k}: {(v*100).toFixed(1)}%</span>)}</div></td>
                     <td className="r" style={{color:'var(--t2)'}}>{p.solubility?units.formatDensity(p.solubility):'—'}</td>
+                    <td className="r" style={{color:'var(--t2)'}}>{p.bagSize?units.formatMass(p.bagSize):'—'}</td>
                     <td className={`r ${g>0.01?'pt-g':''}`}>{g>0.01?units.formatMass(g):'—'}</td>
                     <td className={`r ${sol&&sol>0.8?'sol-warn':''}`}>{sol?(sol*100).toFixed(1)+'%':'—'}</td>
                     <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
@@ -876,7 +902,7 @@ function ProductsModal({result,options,customProducts,setCustomProducts,notify,o
           </table>
         </div>
       </div>
-      {editing&&<ProductForm product={editing} isNew={!customProducts.find(p=>p.id===editing.id)} onSave={saveProduct} onClose={()=>setEditing(null)} units={units}/>}
+      {editing&&<ProductForm product={editing} isNew={!all.find(p=>p.id===editing.id)} onSave={saveProduct} onClose={()=>setEditing(null)} units={units}/>}
     </div>
   );
 }
@@ -898,6 +924,7 @@ function ProductForm({product,isNew,onSave,onClose,units}) {
             <div className="field"><label className="field-label">Tank</label><select className="input select-input" value={p.tank} onChange={e=>set('tank',e.target.value)}><option value="A">A</option><option value="B">B</option><option value="AB">AB (both)</option></select></div>
           </div>
           <div className="field"><label className="field-label">Solubility ({units.densityUnitLabel} water)</label><input className="input" type="number" step="0.001" value={p.solubility?units.densityToFieldValue(p.solubility):''} onChange={e=>set('solubility',e.target.value===''?null:units.densityFromFieldValue(e.target.value))} placeholder={units.system==='imperial'?'e.g. 2.50':'e.g. 0.30'}/></div>
+          <div className="field"><label className="field-label">Bag size ({units.bigMassUnitLabel}, optional)</label><input className="input" type="number" step="0.01" value={p.bagSize?units.bagSizeToFieldValue(p.bagSize):''} onChange={e=>set('bagSize',e.target.value===''?null:units.bagSizeFromFieldValue(e.target.value))} placeholder={units.system==='imperial'?'e.g. 50':'e.g. 22.68'}/><span className="field-hint">As sold/packaged — used to show whole-bag counts in Product Mix</span></div>
           <div className="modal-sec">Nutrient composition — fraction by elemental weight (e.g. 0.19 = 19%)</div>
           <div className="modal-grid">
             {keys.map(k=>(

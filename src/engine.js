@@ -482,6 +482,21 @@ export function getMuldersWarnings(ppm, totalN) {
   return warnings;
 }
 
+// ─── Bag-size math (Product Mix display) ───────────────────────────────────
+// Business rule (not a scientific claim): round up to the next full bag once
+// the shortfall to complete it is within 2500 g, otherwise show whole bags
+// plus a gram remainder. The 2500 g threshold is fixed regardless of the
+// active display unit — only the rendered numbers convert with Phase 0.
+export function computeBagMath(totalMassGrams, bagSizeGrams) {
+  if (!bagSizeGrams || bagSizeGrams <= 0 || !totalMassGrams || totalMassGrams <= 0) return null;
+  const fullBags = Math.floor(totalMassGrams / bagSizeGrams);
+  const remainder = totalMassGrams - fullBags * bagSizeGrams;
+  if (remainder < 1e-6) return { mode: 'exact', bags: fullBags };
+  const shortfallToNext = bagSizeGrams - remainder;
+  if (shortfallToNext <= 2500) return { mode: 'roundUp', bags: fullBags + 1, shortfall: shortfallToNext };
+  return { mode: 'plain', bags: fullBags, remainder };
+}
+
 // ─── Main solver ──────────────────────────────────────────────────────────────
 export function solveRecipe(targets, options = {}, manualOverrides = {}) {
   const {
