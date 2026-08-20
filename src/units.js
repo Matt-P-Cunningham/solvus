@@ -1,5 +1,5 @@
 /**
- * FertiCalc unit system — single source of truth for metric/imperial display.
+ * Nutrient Calculator unit system — single source of truth for metric/imperial display.
  *
  * All internal state (targets in ppm, options in liters, product grams, EC in
  * mS/cm) stays canonical (SI-ish: grams, liters) regardless of display mode.
@@ -17,7 +17,7 @@ export const GAL_TO_L = 3.785411784;
 const OZ_TO_G = LB_TO_G / 16;       // 28.349523125
 const FLOZ_TO_L = GAL_TO_L / 128;   // 0.0295735295625
 
-const STORAGE_KEY = 'ferticalc_units';
+const STORAGE_KEY = 'nutrient_calculator_units';
 
 const UnitsContext = createContext(null);
 

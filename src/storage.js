@@ -1,5 +1,5 @@
 /**
- * FertiCalc Storage Layer
+ * Nutrient Calculator Storage Layer
  *
  * Detects environment and uses the right persistence mechanism:
  * - Electron desktop: IPC to main process → writes JSON to userData folder
@@ -8,7 +8,7 @@
  */
 
 const IS_ELECTRON = typeof window !== 'undefined' && window.electronAPI != null;
-const STORAGE_KEY = 'ferticalc_data';
+const STORAGE_KEY = 'nutrient_calculator_data';
 
 // ─── Schema ───────────────────────────────────────────────────
 // { recipes: { [name]: { targets, options, date } }, products: [...customProducts] }

@@ -1,4 +1,4 @@
-# NutriFlow — Hydroponic Nutrient Calculator
+# Nutrient Calculator
 
 A professional desktop application for hydroponic nutrient management. Built from your `Nutrient_Calculator_V3.xlsx` logic, rebuilt as a modern Electron + React app.
 
@@ -57,7 +57,7 @@ Outputs a distributable app to the `dist/` folder.
 ## Project Structure
 
 ```
-nutriflow/
+nutrient-calculator/
 ├── electron/
 │   ├── main.js          # Electron main process (window, menus, file I/O)
 │   └── preload.js       # Secure bridge between Electron and React

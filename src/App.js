@@ -14,6 +14,7 @@ import {
   labelAnalysisToComposition, blendDeliveredPPM, gramsForTargetEC
 } from './engine';
 import { UnitsProvider, useUnits } from './units';
+import pkg from '../package.json';
 import './App.css';
 
 // ─── Constants ────────────────────────────────────────────────
@@ -81,6 +82,7 @@ function AppInner() {
   const [step, setStep]               = useState(0);
   const [showProducts, setShowProducts]= useState(false);
   const [showSettings, setShowSettings]= useState(false);
+  const [showAbout, setShowAbout]      = useState(false);
   const [targets, setTargets]         = useState({...DEFAULT_TARGETS});
   const [options, setOptions]         = useState({...DEFAULT_OPTIONS});
   const [manualGrams, setManualGrams] = useState({});
@@ -135,7 +137,7 @@ function AppInner() {
     if(!result) return;
     const all=mergeProducts(customProducts);
     const rows=[
-      ['FertiCalc — '+recipeName],['Generated',new Date().toLocaleString()],[],
+      ['Nutrient Calculator — '+recipeName],['Generated',new Date().toLocaleString()],[],
       ['PRODUCT MIX'],['Product','Brand','Tank',`Amount (${units.smallMassUnitLabel})`,'Sol%'],
       ...all.filter(p=>(result.gramsInStock[p.id]||0)>0.01).map(p=>{
         const g=result.gramsInStock[p.id];
@@ -165,8 +167,7 @@ function AppInner() {
       <header className="topbar">
 <div className="tb-logo">
           <Leaf size={16} className="tb-logo-leaf"/>
-          <span>FertiCalc</span>
-          <span style={{fontSize:11,fontWeight:400,color:'var(--t3)',letterSpacing:0,marginLeft:2}}>Hydroponic Nutrient Calculator</span>
+          <span>Nutrient Calculator</span>
         </div>
         <div className="tb-recipe">
           <input className="tb-input" value={recipeName} onChange={e=>setRecipeName(e.target.value)} placeholder="Recipe name…"/>
@@ -195,6 +196,7 @@ function AppInner() {
           <button className="btn btn-ghost btn-sm" onClick={save}><Save size={13}/> Save</button>
           <button className="btn btn-ghost btn-sm" onClick={exportCSV}><Download size={13}/> Export</button>
           <button className="btn btn-ghost btn-sm" onClick={()=>setShowSettings(true)}><Settings size={13}/> Settings</button>
+          <button className="btn btn-ghost btn-sm" onClick={()=>setShowAbout(true)}><HelpCircle size={13}/> About</button>
         </div>
       </header>
 
@@ -235,6 +237,7 @@ function AppInner() {
 
       {showProducts && <ProductsModal {...p} onClose={()=>setShowProducts(false)}/>}
       {showSettings && <SettingsModal options={options} setO={setO} setON={setON} targetEC={targetEC} setTargetEC={setTargetEC} applyEC={applyEC} onClose={()=>setShowSettings(false)}/>}
+      {showAbout && <AboutModal onClose={()=>setShowAbout(false)}/>}
     </div>
   );
 }
@@ -1192,7 +1195,7 @@ function SettingsModal({options,setO,setON,targetEC,setTargetEC,applyEC,onClose}
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" style={{width:560}} onClick={e=>e.stopPropagation()}>
-        <div className="modal-hd"><h2>Settings & methodology</h2><button className="btn-icon" onClick={onClose}><X size={15}/></button></div>
+        <div className="modal-hd"><h2>Settings</h2><button className="btn-icon" onClick={onClose}><X size={15}/></button></div>
         <div className="modal-bd">
 
           <div className="settings-section">
@@ -1205,21 +1208,83 @@ function SettingsModal({options,setO,setON,targetEC,setTargetEC,applyEC,onClose}
             <div className="field-hint">Proportionally scales all nutrient targets to hit the desired EC</div>
           </div>
 
+        </div>
+        <div className="modal-ft"><button className="btn btn-ghost" onClick={onClose}>Close</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ─── About modal ────────────────────────────────────────────────
+// Every citation/methodology note that used to live scattered across the
+// app (mostly in Settings, which was really doubling as an About page) is
+// consolidated here, plus everything sourced during this app's tank-
+// compatibility and blend-fertilizer work.
+function AboutModal({onClose}) {
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{width:640}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-hd"><h2>About</h2><button className="btn-icon" onClick={onClose}><X size={15}/></button></div>
+        <div className="modal-bd">
+
+          <div className="about-hero">
+            <div className="about-hero-icon"><Leaf size={22}/></div>
+            <div>
+              <div className="about-name">Nutrient Calculator</div>
+              <div className="about-tagline">Hydroponic recipe builder — nutrient solving, tank compatibility, and premixed-blend support</div>
+              <div className="about-version">Version {pkg.version}</div>
+            </div>
+          </div>
+
           <div className="settings-section">
             <div className="settings-hd">EC calculation method</div>
             <div style={{background:'var(--s1)',border:'1px solid var(--border)',borderRadius:'var(--r)',padding:'12px 14px',fontSize:12.5,lineHeight:1.6,color:'var(--t1)'}}>
               <p style={{marginBottom:8}}><strong>Sonneveld equivalent charge formula</strong> — the standard used in Dutch commercial greenhouse production worldwide.</p>
               <p style={{marginBottom:8,fontFamily:'monospace',background:'var(--s2)',padding:'6px 10px',borderRadius:5,fontSize:12}}>EC (mS/cm) = Σ(ppm ÷ MW × |charge|) ÷ 20</p>
               <p style={{marginBottom:4}}>Each ion is converted to meq/L using its atomic weight and ionic charge, then summed and divided by 20. Si is excluded (non-ionic). Micronutrients contribute &lt;0.02 mS/cm and are omitted.</p>
-              <p style={{color:'var(--t3)',fontSize:11}}>Source: Sonneveld, Voogt & Spaans (1999). A universal algorithm for calculation of nutrient solutions. <em>Acta Hort 481</em>:331–339.</p>
+              <p style={{color:'var(--t3)',fontSize:11}}>Sonneveld, Voogt & Spaans (1999). A universal algorithm for calculation of nutrient solutions. <em>Acta Hort 481</em>:331–339.</p>
             </div>
           </div>
 
           <div className="settings-section">
-            <div className="settings-hd">Nutrient ratio literature values</div>
+            <div className="settings-hd">Nutrient ratios & interactions</div>
             <div style={{fontSize:12,color:'var(--t1)',lineHeight:1.6}}>
               <p style={{marginBottom:4}}>Ratio benchmarks are taken from Sonneveld & Voogt (2009) <em>Plant Nutrition of Greenhouse Crops</em>, Springer, and Resh (2012) <em>Hydroponic Food Production</em>. Warnings fire when a ratio deviates &gt;20% from the literature average.</p>
               <p style={{color:'var(--t3)',fontSize:11}}>Mulder's interaction thresholds based on Mulder (1953), Bergmann (1992), and Marschner (2012).</p>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-hd">Crop &amp; stage presets</div>
+            <div style={{fontSize:12,color:'var(--t1)',lineHeight:1.7}}>
+              {Object.entries(PRESET_RECIPES).map(([name,p])=>(
+                <p key={name} style={{marginBottom:3}}><strong>{name}:</strong> <span style={{color:'var(--t2)'}}>{p.source}</span></p>
+              ))}
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-hd">Tank A/B compatibility rules</div>
+            <div style={{fontSize:12,color:'var(--t1)',lineHeight:1.6}}>
+              <p style={{marginBottom:6}}>Calcium is hard-blocked from sharing a tank with sulfate or phosphate products (concentrated Ca + SO₄ forms gypsum; Ca + PO₄ forms insoluble calcium phosphate) — per Penn State Extension, <em>Hydroponics Systems: Nutrient Solution Programs and Recipes</em>, and e-GRO, <em>Fertilizer Calculation Basics for Hydroponics</em>.</p>
+              <p style={{marginBottom:6}}>Calcium is also hard-blocked from concentrated silicate — added independently of the sources above, after multiple grower/supplier references (mistculture.com; Haifa Group, "Mastering Tank Mixes") described calcium nitrate reacting with concentrated potassium silicate on contact.</p>
+              <p style={{marginBottom:6}}>Iron chelates default to the calcium group but carry a non-blocking caution: PSU/e-GRO place them with calcium, while UKY Cooperative Extension's jar-test guide separately flags "calcium and iron combinations may precipitate" with no chelated/free distinction — that disagreement is surfaced, not silently resolved.</p>
+              <p style={{color:'var(--t3)',fontSize:11}}>Jar-test method for unclassified products: mix at target concentration in a clear jar, cap, let stand 12–24 hours, check for cloudiness or precipitate (UKY Cooperative Extension).</p>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-hd">Premixed blend fertilizers</div>
+            <div style={{fontSize:12,color:'var(--t1)',lineHeight:1.6}}>
+              <p style={{marginBottom:6}}>Blend guaranteed-analysis labels report N, and all secondary/micronutrients, as elemental percentages — phosphate and potash are reported as the oxides P₂O₅ and K₂O (AAPFCO labeling standard). Conversion factors are exact mass fractions from atomic weights: P₂O₅→P ×0.4364, K₂O→K ×0.8301.</p>
+              <p style={{color:'var(--t3)',fontSize:11}}>Urea-N is tracked for reference against a label's Total N but excluded from ppm/EC math — this app has no urea-N ion to model separately from ammoniacal-N.</p>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-hd">Unit conversions</div>
+            <div style={{fontSize:12,color:'var(--t1)',lineHeight:1.6}}>
+              <p>Exact defined values (international agreement, not measured/rounded): 1 lb = 453.59237 g; 1 US gal = 3.785411784 L.</p>
             </div>
           </div>
 

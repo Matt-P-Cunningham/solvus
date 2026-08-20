@@ -1,5 +1,5 @@
 /**
- * Solvus Calculation Engine v3
+ * Nutrient Calculator — calculation engine
  *
  * EC METHODOLOGY — based on peer-reviewed electrochemistry:
  *

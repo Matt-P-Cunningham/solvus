@@ -6,7 +6,23 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
 // Data file lives in the OS user-data folder — survives app updates
 function getDataPath() {
-  return path.join(app.getPath('userData'), 'ferticalc-data.json');
+  return path.join(app.getPath('userData'), 'data.json');
+}
+
+// One-time migration: the app was previously named "ferticalc", which put
+// its userData folder (and this app's saved recipes/products) at a sibling
+// path keyed off that old name. Copy it forward once so the rename doesn't
+// look like data loss.
+function migrateLegacyData() {
+  try {
+    const newPath = getDataPath();
+    if (fs.existsSync(newPath)) return;
+    const legacyPath = path.join(path.dirname(app.getPath('userData')), 'ferticalc', 'ferticalc-data.json');
+    if (fs.existsSync(legacyPath)) {
+      fs.mkdirSync(path.dirname(newPath), { recursive: true });
+      fs.copyFileSync(legacyPath, newPath);
+    }
+  } catch {}
 }
 
 function readData() {
@@ -45,7 +61,7 @@ ipcMain.handle('export-csv', async (_, { csv, name }) => {
 ipcMain.handle('save-recipe-file', async (_, { data, name }) => {
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath: name + '.nfr',
-    filters: [{ name: 'FertiCalc Recipe', extensions: ['nfr'] }],
+    filters: [{ name: 'Nutrient Calculator Recipe', extensions: ['nfr'] }],
   });
   if (canceled) return false;
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
@@ -54,7 +70,7 @@ ipcMain.handle('save-recipe-file', async (_, { data, name }) => {
 
 ipcMain.handle('open-recipe-file', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    filters: [{ name: 'FertiCalc Recipe', extensions: ['nfr', 'json'] }],
+    filters: [{ name: 'Nutrient Calculator Recipe', extensions: ['nfr', 'json'] }],
     properties: ['openFile'],
   });
   if (canceled || !filePaths.length) return null;
@@ -113,6 +129,6 @@ function createWindow() {
   Menu.setApplicationMenu(menu);
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => { migrateLegacyData(); createWindow(); });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
