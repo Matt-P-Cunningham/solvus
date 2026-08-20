@@ -4,13 +4,14 @@ import {
   Leaf, Zap, FlaskConical, BarChart3, Network, Database,
   AlertTriangle, CheckCircle, Download, Save, X, Info,
   SlidersHorizontal, RefreshCw, Plus, Search, Settings,
-  ChevronRight, ChevronLeft, BookOpen, HelpCircle
+  ChevronRight, ChevronLeft, BookOpen, HelpCircle, Trash2
 } from 'lucide-react';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import {
   solveRecipe, NUTRIENTS, PRODUCTS, PRESET_RECIPES,
   LITERATURE_RATIOS, MULDERS_INTERACTIONS, estimateEC, scaleTargetsToEC
 } from './engine';
+import { UnitsProvider, useUnits } from './units';
 import './App.css';
 
 // ─── Constants ────────────────────────────────────────────────
@@ -52,6 +53,11 @@ const f = (v,d=1) => (v===null||v===undefined||isNaN(v)) ? '—' : Number(v).toF
 
 // ─── App root ─────────────────────────────────────────────────
 export default function App() {
+  return <UnitsProvider><AppInner/></UnitsProvider>;
+}
+
+function AppInner() {
+  const units                         = useUnits();
   const [step, setStep]               = useState(0);
   const [showProducts, setShowProducts]= useState(false);
   const [showSettings, setShowSettings]= useState(false);
@@ -108,10 +114,10 @@ export default function App() {
     const all=[...PRODUCTS,...customProducts];
     const rows=[
       ['FertiCalc — '+recipeName],['Generated',new Date().toLocaleString()],[],
-      ['PRODUCT MIX'],['Product','Brand','Tank','Grams','Sol%'],
+      ['PRODUCT MIX'],['Product','Brand','Tank',`Amount (${units.smallMassUnitLabel})`,'Sol%'],
       ...all.filter(p=>(result.gramsInStock[p.id]||0)>0.01).map(p=>{
         const g=result.gramsInStock[p.id];
-        return [p.name,p.brand||'',p.tank,g.toFixed(2),
+        return [p.name,p.brand||'',p.tank,units.massToFieldValue(g).toFixed(2),
           p.solubility?(g/(p.solubility*options.stockVolumeLiters*1000)*100).toFixed(1)+'%':'N/A'];
       }),
       [],[`NUTRIENT ANALYSIS`],['Nutrient','Target ppm','Delivered ppm','% Target'],
@@ -124,7 +130,7 @@ export default function App() {
     notify('Exported CSV');
   };
 
-  const p={step,setStep,targets,options,result,recipeName,manualGrams,targetEC,activePreset,
+  const p={step,setStep,targets,options,result,recipeName,manualGrams,targetEC,activePreset,units,
     customProducts,savedRecipes,setT,setO,setON,setTargets,setManualGrams,setTargetEC,
     applyEC,setRecipeName,loadPreset,save,exportCSV,setCustomProducts,setSavedRecipes,notify};
 
@@ -158,6 +164,10 @@ export default function App() {
         </div>
         <div className="tb-center"/>
         <div className="tb-actions">
+          <div className="unit-toggle" role="group" aria-label="Unit system">
+            <button className={`unit-toggle-btn ${units.system==='metric'?'act':''}`} onClick={()=>units.setSystem('metric')}>Metric</button>
+            <button className={`unit-toggle-btn ${units.system==='imperial'?'act':''}`} onClick={()=>units.setSystem('imperial')}>Imperial</button>
+          </div>
           <button className="btn btn-ghost btn-sm" onClick={()=>setShowProducts(true)}><Database size={13}/> Products</button>
           <button className="btn btn-ghost btn-sm" onClick={save}><Save size={13}/> Save</button>
           <button className="btn btn-ghost btn-sm" onClick={exportCSV}><Download size={13}/> Export</button>
@@ -207,7 +217,8 @@ export default function App() {
 }
 
 // ─── Step 1: System ───────────────────────────────────────────
-function StepSystem({options,setO,setON,next}) {
+function StepSystem({options,setO,setON,units,next}) {
+  const round=v=>Math.round(v*10000)/10000;
   return (
     <div>
       <div className="page-header">
@@ -219,14 +230,14 @@ function StepSystem({options,setO,setON,next}) {
         <div className="card-title"><SlidersHorizontal size={12}/> Tank volumes</div>
         <div className="grid-2" style={{gap:20}}>
           <div className="field">
-            <label className="field-label">Supply / recirculation volume<span className="field-note">({(options.supplyVolumeLiters/3.785).toFixed(0)} gal)</span></label>
-            <input className="input" type="number" value={options.supplyVolumeLiters} onChange={e=>setO('supplyVolumeLiters',parseFloat(e.target.value)||0)}/>
-            <span className="field-hint">Total volume of your recirculating reservoir, in liters</span>
+            <label className="field-label">Supply / recirculation volume<span className="field-note">({units.volumeUnitLabel})</span></label>
+            <input className="input" type="number" value={round(units.volumeToFieldValue(options.supplyVolumeLiters))} onChange={e=>setO('supplyVolumeLiters',units.volumeFromFieldValue(e.target.value))}/>
+            <span className="field-hint">Total volume of your recirculating reservoir</span>
           </div>
           <div className="field">
-            <label className="field-label">Stock solution volume</label>
-            <input className="input" type="number" value={options.stockVolumeLiters} onChange={e=>setO('stockVolumeLiters',parseFloat(e.target.value)||0)}/>
-            <span className="field-hint">Volume of concentrate being prepared, in liters</span>
+            <label className="field-label">Stock solution volume<span className="field-note">({units.volumeUnitLabel})</span></label>
+            <input className="input" type="number" value={round(units.volumeToFieldValue(options.stockVolumeLiters))} onChange={e=>setO('stockVolumeLiters',units.volumeFromFieldValue(e.target.value))}/>
+            <span className="field-hint">Volume of concentrate being prepared</span>
           </div>
           <div className="field">
             <label className="field-label">Concentration factor</label>
@@ -368,7 +379,7 @@ function NC({n,val,onChange,del}) {
 }
 
 // ─── Step 4: Mix ──────────────────────────────────────────────
-function StepMix({result,options,manualGrams,setManualGrams,customProducts,setStep,notify}) {
+function StepMix({result,options,manualGrams,setManualGrams,customProducts,setStep,notify,units}) {
   const hasOv=Object.keys(manualGrams).length>0;
   const all=[...PRODUCTS,...customProducts];
 
@@ -380,11 +391,11 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
       <div key={label}>
         <div className="tank-head">
           <div className={`tank-pill ${cls}`}>{label}</div>
-          <div className="tank-kg">{total>0?(total/1000).toFixed(2)+' kg total':''}</div>
+          <div className="tank-kg">{total>0?units.formatMass(total)+' total':''}</div>
         </div>
         <div className="card" style={{overflow:'hidden',marginBottom:16}}>
           <table className="tbl">
-            <thead><tr><th style={{width:'42%'}}>Product</th><th className="r">Auto (g)</th><th className="r">Override (g)</th><th className="r">Sol%</th></tr></thead>
+            <thead><tr><th style={{width:'40%'}}>Product</th><th className="r">Auto ({units.smallMassUnitLabel})</th><th className="r">Override ({units.smallMassUnitLabel})</th><th className="r">Sol%</th></tr></thead>
             <tbody>
               {rows.map(p=>{
                 const auto=result?.gramsInStock[p.id]||0;
@@ -392,16 +403,17 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
                 const g=ov!==''?parseFloat(ov)||0:auto;
                 const sol=p.solubility?g/(p.solubility*options.stockVolumeLiters*1000):null;
                 const sc=sol&&sol>1?'sol-err':sol&&sol>0.8?'sol-warn':'sol-ok';
+                const ovField=ov!==''?units.massToFieldValue(parseFloat(ov)||0):'';
                 return (
                   <tr key={p.id} className={sol&&sol>0.8?'row-warn':''}>
                     <td><div className="td-pn">{p.name}</div><div className="td-pb">{p.brand}</div></td>
-                    <td className="r td-dim">{auto>0.01?auto.toFixed(1):'—'}</td>
+                    <td className="r td-dim">{auto>0.01?units.massToFieldValue(auto).toFixed(1):'—'}</td>
                     <td style={{textAlign:'right',paddingRight:6}}>
                       <input type="number" min="0" step="0.1"
                         className={`g-inp ${ov!==''?'ov':''}`}
-                        placeholder={auto>0?auto.toFixed(1):'0'}
-                        value={ov}
-                        onChange={e=>{const v=e.target.value; setManualGrams(prev=>{const next={...prev};if(v==='')delete next[p.id];else next[p.id]=v;return next;});}}
+                        placeholder={auto>0?units.massToFieldValue(auto).toFixed(1):'0'}
+                        value={ovField}
+                        onChange={e=>{const v=e.target.value; setManualGrams(prev=>{const next={...prev};if(v==='')delete next[p.id];else next[p.id]=String(units.massFromFieldValue(v));return next;});}}
                       />
                     </td>
                     <td className={`r ${sc}`}>{sol!==null?(sol*100).toFixed(1)+'%':'—'}</td>
@@ -423,7 +435,7 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
       </div>
       <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'center'}}>
         {hasOv&&<button className="btn btn-ghost btn-sm" onClick={()=>setManualGrams({})}><RefreshCw size={12}/> Reset overrides</button>}
-        <span style={{fontSize:12,color:'var(--t3)'}}>Stock: {options.stockVolumeLiters} L at {options.concentrationFactor}× — supply: {(options.supplyVolumeLiters/3785).toFixed(0)}k L</span>
+        <span style={{fontSize:12,color:'var(--t3)'}}>Stock: {units.formatVolume(options.stockVolumeLiters)} at {options.concentrationFactor}× — supply: {units.formatVolume(options.supplyVolumeLiters)}</span>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
         <div>
@@ -667,7 +679,7 @@ function LivePanel({result,targets}) {
 }
 
 // ─── Products modal ───────────────────────────────────────────
-function ProductsModal({result,options,customProducts,setCustomProducts,notify,onClose}) {
+function ProductsModal({result,options,customProducts,setCustomProducts,notify,onClose,units}) {
   const [search,setSearch]=useState('');
   const [editing,setEditing]=useState(null);
   const all=[...PRODUCTS,...customProducts];
@@ -697,7 +709,7 @@ function ProductsModal({result,options,customProducts,setCustomProducts,notify,o
         </div>
         <div style={{overflowY:'auto',maxHeight:'72vh'}}>
           <table className="pt">
-            <thead><tr><th>Product</th><th>Brand</th><th>Tank</th><th>Composition</th><th className="r">Sol. g/mL</th><th className="r">In recipe</th><th className="r">Sol%</th><th></th></tr></thead>
+            <thead><tr><th>Product</th><th>Brand</th><th>Tank</th><th>Composition</th><th className="r">Solubility</th><th className="r">In recipe</th><th className="r">Sol%</th><th></th></tr></thead>
             <tbody>
               {filtered.map(p=>{
                 const g=result?.gramsInStock[p.id]||0;
@@ -708,8 +720,8 @@ function ProductsModal({result,options,customProducts,setCustomProducts,notify,o
                     <td className="pt-brand">{p.brand||'—'}</td>
                     <td><span className={`tank-pill tp-${p.tank.toLowerCase()}`}>{p.tank}</span></td>
                     <td><div className="comp-pills">{Object.entries(p.composition).filter(([,v])=>v>0).map(([k,v])=><span key={k} className="comp-pill">{k}: {(v*100).toFixed(1)}%</span>)}</div></td>
-                    <td className="r" style={{color:'var(--t2)'}}>{p.solubility||'—'}</td>
-                    <td className={`r ${g>0.01?'pt-g':''}`}>{g>0.01?g.toFixed(1)+' g':'—'}</td>
+                    <td className="r" style={{color:'var(--t2)'}}>{p.solubility?units.formatDensity(p.solubility):'—'}</td>
+                    <td className={`r ${g>0.01?'pt-g':''}`}>{g>0.01?units.formatMass(g):'—'}</td>
                     <td className={`r ${sol&&sol>0.8?'sol-warn':''}`}>{sol?(sol*100).toFixed(1)+'%':'—'}</td>
                     <td style={{textAlign:'right',whiteSpace:'nowrap'}}>
                       <button className="btn-icon" onClick={()=>setEditing({...p})} title="Edit"><Info size={12}/></button>
@@ -722,12 +734,12 @@ function ProductsModal({result,options,customProducts,setCustomProducts,notify,o
           </table>
         </div>
       </div>
-      {editing&&<ProductForm product={editing} isNew={!customProducts.find(p=>p.id===editing.id)} onSave={saveProduct} onClose={()=>setEditing(null)}/>}
+      {editing&&<ProductForm product={editing} isNew={!customProducts.find(p=>p.id===editing.id)} onSave={saveProduct} onClose={()=>setEditing(null)} units={units}/>}
     </div>
   );
 }
 
-function ProductForm({product,isNew,onSave,onClose}) {
+function ProductForm({product,isNew,onSave,onClose,units}) {
   const [p,setP]=useState({...product});
   const keys=['NO3','NH4','P','K','Ca','Mg','S','Fe','Mn','Zn','Cu','B','Mo','Si'];
   const set=(k,v)=>setP(prev=>({...prev,[k]:v}));
@@ -743,7 +755,7 @@ function ProductForm({product,isNew,onSave,onClose}) {
             <div className="field"><label className="field-label">Brand</label><input className="input" value={p.brand||''} onChange={e=>set('brand',e.target.value)} placeholder="e.g. Yara"/></div>
             <div className="field"><label className="field-label">Tank</label><select className="input select-input" value={p.tank} onChange={e=>set('tank',e.target.value)}><option value="A">A</option><option value="B">B</option><option value="AB">AB (both)</option></select></div>
           </div>
-          <div className="field"><label className="field-label">Solubility (g/mL water)</label><input className="input" type="number" step="0.001" value={p.solubility||''} onChange={e=>set('solubility',parseFloat(e.target.value)||null)} placeholder="e.g. 0.30"/></div>
+          <div className="field"><label className="field-label">Solubility ({units.densityUnitLabel} water)</label><input className="input" type="number" step="0.001" value={p.solubility?units.densityToFieldValue(p.solubility):''} onChange={e=>set('solubility',e.target.value===''?null:units.densityFromFieldValue(e.target.value))} placeholder={units.system==='imperial'?'e.g. 2.50':'e.g. 0.30'}/></div>
           <div className="modal-sec">Nutrient composition — fraction by elemental weight (e.g. 0.19 = 19%)</div>
           <div className="modal-grid">
             {keys.map(k=>(
