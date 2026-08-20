@@ -422,7 +422,7 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
         <div className="card" style={{overflow:'hidden',marginBottom:16}}>
           <div style={{overflowX:'auto'}}>
           <table className="tbl" style={{minWidth:540}}>
-            <thead><tr><th style={{width:'34%',minWidth:150}}>Product</th><th className="r" style={{minWidth:90}}>Auto ({units.smallMassUnitLabel})</th><th className="r" style={{minWidth:130}}>Override ({units.smallMassUnitLabel})</th><th className="r" style={{minWidth:60}}>Sol%</th></tr></thead>
+            <thead><tr><th style={{width:'34%',minWidth:150}}>Product</th><th className="r" style={{minWidth:90}}>Auto ({units.smallMassUnitLabel})</th><th className="r" style={{minWidth:155}}>Override ({units.smallMassUnitLabel})</th><th className="r" style={{minWidth:60}}>Sol%</th></tr></thead>
             <tbody>
               {rows.map(p=>{
                 const auto=result?.gramsInStock[p.id]||0;
@@ -436,12 +436,20 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
                     <td><div className="td-pn">{p.name}</div><div className="td-pb">{p.brand}</div></td>
                     <td className="r td-dim">{auto>0.01?units.massToFieldValue(auto).toFixed(1):'—'}</td>
                     <td style={{textAlign:'right',paddingRight:6}}>
-                      <input type="number" min="0" step="0.1"
-                        className={`g-inp ${ov!==''?'ov':''}`}
-                        placeholder={auto>0?units.massToFieldValue(auto).toFixed(1):'0'}
-                        value={ovField}
-                        onChange={e=>{const v=e.target.value; setManualGrams(prev=>{const next={...prev};if(v==='')delete next[p.id];else next[p.id]=String(units.massFromFieldValue(v));return next;});}}
-                      />
+                      <div className="ov-cell">
+                        <input type="number" min="0" step="0.1"
+                          className={`g-inp ${ov!==''?'ov':''}`}
+                          placeholder={auto>0?units.massToFieldValue(auto).toFixed(1):'0'}
+                          value={ovField}
+                          onChange={e=>{const v=e.target.value; setManualGrams(prev=>{const next={...prev};if(v==='')delete next[p.id];else next[p.id]=String(units.massFromFieldValue(v));return next;});}}
+                        />
+                        {ov!==''&&(
+                          <button className="ov-reset" title={`Reset ${p.name} to calculated value`}
+                            onClick={()=>setManualGrams(prev=>{const next={...prev};delete next[p.id];return next;})}>
+                            <RefreshCw size={11}/>
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className={`r ${sc}`}>{sol!==null?(sol*100).toFixed(1)+'%':'—'}</td>
                   </tr>

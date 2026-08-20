@@ -525,8 +525,8 @@ body {
 .td-pb  { font-size: 11px; color: var(--t3); }
 
 .g-inp {
-  width: 100%;
-  min-width: 110px;
+  flex: 1;
+  min-width: 90px;
   max-width: 150px;
   background: var(--s1);
   border: 1px solid var(--border);
@@ -540,6 +540,21 @@ body {
 }
 .g-inp:focus { outline: none; border-color: var(--teal); background: var(--surface); }
 .g-inp.ov { background: var(--purp-lt); border-color: var(--purp-bd); color: var(--purp); font-weight: 600; }
+
+.ov-cell { display: flex; align-items: center; justify-content: flex-end; gap: 4px; width: 100%; }
+.ov-reset {
+  background: transparent;
+  border: none;
+  color: var(--purp);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  transition: background .12s;
+}
+.ov-reset:hover { background: var(--purp-lt); }
 
 .sol-ok   { color: var(--t3); }
 .sol-warn { color: var(--orange); font-weight: 600; }
