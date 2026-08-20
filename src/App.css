@@ -442,7 +442,7 @@ body {
   margin-bottom: 4px;
 }
 .nc-lbl { font-size: 10px; font-weight: 700; color: var(--t2); text-transform: uppercase; letter-spacing: .5px; }
-.nc-sym { font-size: 9px; color: var(--t4); }
+.nc-sym { font-size: 9px; color: var(--t1); font-weight: 600; }
 
 .nc-row { display: flex; align-items: baseline; gap: 3px; }
 .nc-inp {
@@ -457,7 +457,7 @@ body {
   letter-spacing: -.3px;
 }
 .nc-inp::-webkit-inner-spin-button { display: none; }
-.nc-unit { font-size: 10px; color: var(--t4); flex-shrink: 0; }
+.nc-unit { font-size: 10px; color: var(--t1); font-weight: 600; flex-shrink: 0; }
 
 .nc-track { height: 2px; background: rgba(0,0,0,.07); border-radius: 2px; overflow: hidden; margin-top: 8px; }
 .nc-fill { height: 100%; border-radius: 2px; transition: width .3s ease; }
