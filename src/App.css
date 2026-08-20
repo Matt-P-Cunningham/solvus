@@ -571,6 +571,8 @@ body {
   transition: background .12s;
 }
 .ov-reset:hover { background: var(--purp-lt); }
+.ov-reset-disabled { color: var(--t4); cursor: default; }
+.ov-reset-disabled:hover { background: transparent; }
 
 .sol-ok   { color: var(--t3); }
 .sol-warn { color: var(--orange); font-weight: 600; }

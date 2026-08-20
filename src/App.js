@@ -461,7 +461,10 @@ function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZo
               <button type="button" className="stepper-btn" tabIndex={-1} title="Decrease" onClick={()=>onBump(-1)}><ChevronDown size={9}/></button>
             </div>
           </div>
-          {ov!==''&&<button className="ov-reset" title={`Reset ${p.name} to calculated value`} onClick={onReset}><RefreshCw size={11}/></button>}
+          <button className={`ov-reset ${ov===''?'ov-reset-disabled':''}`} disabled={ov===''}
+            title={ov===''?'No override to reset':`Reset ${p.name} to calculated value`} onClick={onReset}>
+            <RefreshCw size={11}/>
+          </button>
         </div>
       </td>
       <td className={`r ${sc}`}>{sol!==null?(sol*100).toFixed(1)+'%':'—'}</td>
