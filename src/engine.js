@@ -415,7 +415,13 @@ export const MULDERS_INTERACTIONS = [
  * Si is excluded (non-ionic silicic acid, no charge, zero EC contribution).
  * Micronutrients Fe/Mn/Zn/Cu/B/Mo contribute <0.02 mS/cm total — excluded.
  */
-export function estimateEC(ppm) {
+// Unrounded EC — used internally wherever EC feeds further arithmetic (e.g.
+// gramsForTargetEC's proportional scaling). estimateEC() below rounds to
+// 2 decimals for display, which is negligible error at realistic ppm scales
+// but becomes a large *relative* error against the tiny reference EC used to
+// solve backwards for a dose, and that error then gets amplified by the
+// scaling itself.
+function rawEC(ppm) {
   // MW and charge of each nutrient ELEMENT as measured in ppm
   const ions = {
     NO3: { mw: 14,    charge: 1 },  // ppm as N, charge of NO3- = 1
@@ -438,7 +444,11 @@ export function estimateEC(ppm) {
   // Sonneveld formula: EC = total_meq / 20
   // The /20 factor accounts for both cation and anion sides (we sum all, then divide by 20)
   // This gives EC in mS/cm at 25°C
-  return Math.max(0, Math.round((sumMeq / 20) * 100) / 100);
+  return Math.max(0, sumMeq / 20);
+}
+
+export function estimateEC(ppm) {
+  return Math.round(rawEC(ppm) * 100) / 100;
 }
 
 // Scale all nutrient targets proportionally to a desired EC
@@ -480,6 +490,62 @@ export function getMuldersWarnings(ppm, totalN) {
   flag(d.S && d.Mo && d.Mo > 0 && d.S/d.Mo > 500, 'med', 'S', 'Mo', d.S/d.Mo, '< 500',  'High S:Mo — sulfate competes with molybdate at root uptake sites');
 
   return warnings;
+}
+
+// ─── Premixed blend fertilizers (e.g. Peters 15-5-15) ──────────────────────
+// US fertilizer guaranteed-analysis labels report N, and all secondary/micro
+// nutrients, as elemental percentages — phosphate and potash are the sole
+// exceptions, reported as the oxides P2O5 and K2O (AAPFCO labeling standard).
+// Conversion factors below are the exact mass fractions of P in P2O5 and K in
+// K2O, derived from atomic weights (P 30.974, K 39.098, O 16.00), not
+// empirical/rounded figures:
+//   P2O5 -> P: 2(30.974) / (2(30.974) + 5(16.00)) = 61.948/141.948 = 0.4364
+//   K2O  -> K: 2(39.098) / (2(39.098) + 16.00)     = 78.196/94.196 = 0.8301
+export const P2O5_TO_P = 0.4364;
+export const K2O_TO_K  = 0.8301;
+
+// labelAnalysis uses guaranteed-analysis keys: NO3/NH4 (Nitrate-N /
+// Ammoniacal-N, as fractions e.g. 0.15 = 15%), P2O5, K2O, and elemental
+// Ca/Mg/S/Fe/Mn/Zn/Cu/B/Mo — converts to the same elemental composition{}
+// shape single-salt products already use, so a blend plugs into every
+// existing calculation (solver, tank compatibility, solubility, bag math)
+// with no special-casing. ureaN is deliberately excluded — kept on the
+// product only for reference against the label's Total N, since this app
+// has no urea-N ion to model separately from ammoniacal-N.
+export function labelAnalysisToComposition(labelAnalysis = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(labelAnalysis)) {
+    if (!v || k === 'ureaN') continue;
+    if (k === 'P2O5') out.P = (out.P || 0) + v * P2O5_TO_P;
+    else if (k === 'K2O') out.K = (out.K || 0) + v * K2O_TO_K;
+    else out[k] = (out[k] || 0) + v;
+  }
+  return out;
+}
+
+// Delivered ppm and EC from a single blend product at a given stock dose —
+// "what do I get if I mix this blend alone, as sold." Mirrors the toSupplyPPM
+// math inside solveRecipe but for one product in isolation.
+export function blendDeliveredPPM(product, grams, options = {}) {
+  const { stockVolumeLiters = 189.271, concentrationFactor = 100 } = options;
+  const ppm = {};
+  for (const [el, frac] of Object.entries(product.composition || {})) {
+    if (frac > 0) ppm[el] = (grams * frac * 1000) / (concentrationFactor * stockVolumeLiters);
+  }
+  const totalN = (ppm.NO3 || 0) + (ppm.NH4 || 0);
+  return { deliveredPPM: ppm, ecEstimate: estimateEC(ppm), totalN };
+}
+
+// Grams of a blend product needed to hit a target EC on its own (EC scales
+// linearly with dose, so solve directly from a 1000g reference basis). Uses
+// the unrounded rawEC, not blendDeliveredPPM's rounded ecEstimate — at this
+// tiny per-1000g reference scale, 2-decimal rounding is a large relative
+// error that the proportional scaling below would otherwise amplify.
+export function gramsForTargetEC(product, targetEC, options = {}) {
+  const ref = blendDeliveredPPM(product, 1000, options);
+  const refEC = rawEC(ref.deliveredPPM);
+  if (!refEC || refEC <= 0) return 0;
+  return Math.max(0, (targetEC / refEC) * 1000);
 }
 
 // ─── Bag-size math (Product Mix display) ───────────────────────────────────

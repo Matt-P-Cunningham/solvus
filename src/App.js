@@ -10,7 +10,8 @@ import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tool
 import {
   solveRecipe, NUTRIENTS, PRODUCTS, PRESET_RECIPES,
   LITERATURE_RATIOS, MULDERS_INTERACTIONS, estimateEC, scaleTargetsToEC,
-  classifyProduct, checkTankDrop, computeBagMath
+  classifyProduct, checkTankDrop, computeBagMath,
+  labelAnalysisToComposition, blendDeliveredPPM, gramsForTargetEC
 } from './engine';
 import { UnitsProvider, useUnits } from './units';
 import './App.css';
@@ -48,7 +49,14 @@ const STEPS = [
 ];
 const MULDER_KEYS  = ['N','P','K','Ca','Mg','S','Fe','Mn','Zn','Cu','B','Mo'];
 const MULDER_NAMES = {N:'Nitrogen',P:'Phosphorus',K:'Potassium',Ca:'Calcium',Mg:'Magnesium',S:'Sulfur',Fe:'Iron',Mn:'Manganese',Zn:'Zinc',Cu:'Copper',B:'Boron',Mo:'Molybdenum'};
-const EMPTY_PROD   = {id:'',name:'',brand:'',tank:'B',solubility:'',bagSize:'',composition:{NO3:0,NH4:0,P:0,K:0,Ca:0,Mg:0,S:0,Fe:0,Mn:0,Zn:0,Cu:0,B:0,Mo:0,Si:0}};
+// labelAnalysis mirrors a guaranteed-analysis tag: NO3/NH4 are Nitrate-N and
+// Ammoniacal-N (the two N forms the app's chemistry model tracks); ureaN is
+// kept only for reference against the label's Total N and is NOT converted
+// into composition — this app has no urea-N ion to model its EC/uptake
+// chemistry against, so silently lumping it into NH4 would misrepresent it.
+const EMPTY_PROD   = {id:'',name:'',brand:'',tank:'B',solubility:'',bagSize:'',kind:'salt',
+  labelAnalysis:{NO3:0,NH4:0,ureaN:0,P2O5:0,K2O:0,Ca:0,Mg:0,S:0,Fe:0,Mn:0,Zn:0,Cu:0,B:0,Mo:0},
+  composition:{NO3:0,NH4:0,P:0,K:0,Ca:0,Mg:0,S:0,Fe:0,Mn:0,Zn:0,Cu:0,B:0,Mo:0,Si:0}};
 
 const f = (v,d=1) => (v===null||v===undefined||isNaN(v)) ? '—' : Number(v).toFixed(d);
 
@@ -430,7 +438,7 @@ function BagMathLabel({bagMath,units}) {
 }
 
 // ─── One draggable product row, shared by all three tank zones ────────────
-function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZone,isMixed,onToggleMixed,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onOverrideBlur,onBump,onReset}) {
+function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZone,isMixed,onToggleMixed,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onOverrideBlur,onBump,onReset,onOpenBlendCalc}) {
   return (
     <tr draggable className={`mix-row ${sol&&sol>0.8?'row-warn':''} ${isMixed?'row-mixed':''}`}
       onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -439,6 +447,7 @@ function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZo
           <input type="checkbox" className="mix-check" checked={!!isMixed} onChange={onToggleMixed} title="Mark as already added to the tank"/>
           <GripVertical size={11} className="drag-handle"/>{p.name}
           {caution && <span className="caution-dot" title={caution}>⚠</span>}
+          {p.kind==='blend' && <button className="blend-calc-btn" onClick={onOpenBlendCalc} title="Blend calculator — dose, resulting ppm, supplementation"><FlaskConical size={11}/> Blend calc</button>}
         </div>
         <div className="td-pb">{p.brand}</div>
         {suggestedZone && (
@@ -476,18 +485,22 @@ function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZo
 }
 
 // ─── Step 4: Mix ──────────────────────────────────────────────
-function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTankOverrides,mixedProducts,setMixedProducts,customProducts,setStep,notify,units}) {
+function StepMix({result,options,targets,manualGrams,setManualGrams,tankOverrides,setTankOverrides,mixedProducts,setMixedProducts,customProducts,setStep,notify,units}) {
   const hasOv=Object.keys(manualGrams).length>0;
   const hasTankOv=Object.keys(tankOverrides).length>0;
   const hasMixed=Object.keys(mixedProducts).length>0;
   const all=mergeProducts(customProducts);
   const toggleMixed = id => setMixedProducts(prev=>{const next={...prev}; if(next[id]) delete next[id]; else next[id]=true; return next;});
+  const [blendCalcProduct,setBlendCalcProduct]=useState(null);
   const [dragOverZone,setDragOverZone]=useState(null);
   const [tankMsg,setTankMsg]=useState(null);
 
   const zoneOf = p => { const eff = tankOverrides[p.id] ?? p.tank; return eff==='AB' ? 'FLEX' : eff; };
   const massOf = p => parseFloat(manualGrams[p.id] ?? result?.gramsInStock[p.id] ?? 0) || 0;
-  const shownIn = (p,zone) => zoneOf(p)===zone && (massOf(p)>0.01 || manualGrams[p.id]!==undefined);
+  // Blends never get an automatic calculated dose (nothing in solveRecipe
+  // knows about them) — their only path to a dose is the Blend Calculator,
+  // so they must stay visible at 0g or that calculator would be unreachable.
+  const shownIn = (p,zone) => zoneOf(p)===zone && (massOf(p)>0.01 || manualGrams[p.id]!==undefined || p.kind==='blend');
 
   const totalA = all.filter(p=>shownIn(p,'A')).reduce((s,p)=>s+massOf(p),0);
   const totalB = all.filter(p=>shownIn(p,'B')).reduce((s,p)=>s+massOf(p),0);
@@ -605,6 +618,7 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
                   <MixRow key={p.id} p={p} auto={auto} ov={ov} ovField={ovField} sol={sol} sc={sc} units={units} caution={caution} bagMath={bagMath}
                     step={tier.step} suggestedZone={suggestedZone}
                     isMixed={mixedProducts[p.id]} onToggleMixed={()=>toggleMixed(p.id)}
+                    onOpenBlendCalc={()=>setBlendCalcProduct(p)}
                     onSuggestionClick={()=>handleDrop(p.id,suggestedZone)}
                     onDragStart={e=>e.dataTransfer.setData('text/plain',p.id)}
                     onDragEnd={()=>setDragOverZone(null)}
@@ -679,6 +693,127 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
         <button className="btn btn-ghost" onClick={()=>setStep(2)}><ChevronLeft size={14}/> Back</button>
         <span className="step-footer-info">Live summary updates on the right as you adjust values</span>
         <button className="btn btn-primary" onClick={()=>setStep(4)}>Review & validate <ChevronRight size={14}/></button>
+      </div>
+
+      {blendCalcProduct && (
+        <BlendCalculatorModal product={blendCalcProduct} options={options} targets={targets}
+          manualGrams={manualGrams} setManualGrams={setManualGrams} units={units} notify={notify}
+          onClose={()=>setBlendCalcProduct(null)}/>
+      )}
+    </div>
+  );
+}
+
+// ─── Blend calculator ─────────────────────────────────────────
+// "Mixed as is" resulting ppm/EC for a premixed blend at a chosen dose, a
+// dose-for-target-EC solver, and an opt-in supplementation gap-fill using
+// the existing single-salt solver — none of this writes to the recipe until
+// the user explicitly applies it.
+function BlendCalculatorModal({product,options,targets,manualGrams,setManualGrams,units,notify,onClose}) {
+  const startGrams = parseFloat(manualGrams[product.id] ?? 0) || 0;
+  const [doseGrams,setDoseGrams]=useState(startGrams);
+  const [targetECInput,setTargetECInput]=useState('');
+  const [supplement,setSupplement]=useState(null);
+
+  const doseField = units.massToFieldValue(doseGrams);
+  const setDoseField = v => setDoseGrams(Math.max(0, units.massFromFieldValue(v)));
+
+  const asIs = blendDeliveredPPM(product, doseGrams, options);
+
+  const solveForEC = () => {
+    const ec = parseFloat(targetECInput);
+    if (!ec || ec<=0) return;
+    setDoseGrams(gramsForTargetEC(product, ec, options));
+  };
+
+  const applyDose = () => {
+    setManualGrams(prev=>({...prev,[product.id]:String(doseGrams)}));
+    notify(`${product.name} dose applied to Product Mix`);
+  };
+
+  const calcSupplement = () => {
+    const gap = {};
+    for (const n of NUTRIENTS) gap[n.key] = Math.max(0, (targets[n.key]||0) - (asIs.deliveredPPM[n.key]||0));
+    const solved = solveRecipe(gap, options, {});
+    const rows = [...PRODUCTS].filter(p=>p.id!==product.id && (solved.gramsInStock[p.id]||0)>0.01)
+      .map(p=>({id:p.id,name:p.name,grams:solved.gramsInStock[p.id]}));
+    setSupplement({gap, rows});
+  };
+
+  const applySupplement = () => {
+    if (!supplement) return;
+    setManualGrams(prev=>{
+      const next={...prev};
+      supplement.rows.forEach(r=>{next[r.id]=String(r.grams);});
+      return next;
+    });
+    notify(`Applied supplementation for ${supplement.rows.length} product${supplement.rows.length===1?'':'s'}`);
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{width:640}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-hd"><h2>{product.name} — blend calculator</h2><button className="btn-icon" onClick={onClose}><X size={15}/></button></div>
+        <div className="modal-bd">
+
+          <div className="settings-section">
+            <div className="settings-hd">Dose</div>
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+              <input className="input" type="number" min="0" step="0.1" value={doseField.toFixed(2)} onChange={e=>setDoseField(e.target.value)} style={{width:120}}/>
+              <span style={{fontSize:12,color:'var(--t3)'}}>{units.smallMassUnitLabel} per {units.formatVolume(options.stockVolumeLiters)} stock @ {options.concentrationFactor}×</span>
+            </div>
+            <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
+              <input className="input" type="number" min="0" step="0.1" placeholder="e.g. 1.8" value={targetECInput} onChange={e=>setTargetECInput(e.target.value)} style={{width:120}}/>
+              <span style={{fontSize:12,color:'var(--t3)'}}>mS/cm</span>
+              <button className="btn btn-ghost btn-sm" onClick={solveForEC}>Solve dose for target EC</button>
+            </div>
+            <button className="btn btn-primary btn-sm" style={{marginTop:10}} onClick={applyDose}>Apply dose to Product Mix</button>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-hd">Mixed as is — resulting values</div>
+            <div className="stat-row" style={{marginBottom:0}}>
+              <div className="stat-card"><div className="stat-v" style={{color:'var(--amber)'}}>{f(asIs.ecEstimate,2)} <span style={{fontSize:12,fontWeight:400,color:'var(--t3)'}}>mS/cm</span></div><div className="stat-l">Predicted EC</div></div>
+              <div className="stat-card"><div className="stat-v" style={{color:'var(--blue)'}}>{f(asIs.totalN,1)}</div><div className="stat-l">Total N (ppm)</div></div>
+            </div>
+            <div className="acc-list" style={{marginTop:12}}>
+              {NUTRIENTS.filter(n=>(asIs.deliveredPPM[n.key]||0)>0).map(n=>(
+                <div key={n.key} className="lp-row">
+                  <span className="lp-row-lbl">{n.label}</span>
+                  <span className="lp-row-val">{f(asIs.deliveredPPM[n.key],n.type==='micro'?3:1)} ppm</span>
+                </div>
+              ))}
+              {Object.values(asIs.deliveredPPM).every(v=>!v) && <div style={{fontSize:12,color:'var(--t3)'}}>Set a dose above to see resulting values.</div>}
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-hd">Supplement with single salts (optional)</div>
+            <div className="field-hint" style={{marginBottom:8}}>Fills the gap between this blend's delivered ppm (at the dose above) and your Nutrient Targets, using the same solver as the rest of Product Mix. Nothing changes until you apply it.</div>
+            <button className="btn btn-ghost btn-sm" onClick={calcSupplement}>Calculate supplementation</button>
+            {supplement && (
+              <div style={{marginTop:10}}>
+                {supplement.rows.length===0 ? (
+                  <div style={{fontSize:12,color:'var(--green)'}}>This blend alone already meets or exceeds every target — no supplementation needed.</div>
+                ) : (
+                  <>
+                    <table className="tbl">
+                      <thead><tr><th>Product</th><th className="r">Amount ({units.smallMassUnitLabel})</th></tr></thead>
+                      <tbody>
+                        {supplement.rows.map(r=>(
+                          <tr key={r.id}><td>{r.name}</td><td className="r">{units.massToFieldValue(r.grams).toFixed(1)}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <button className="btn btn-primary btn-sm" style={{marginTop:10}} onClick={applySupplement}>Apply supplementation to Product Mix</button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+        </div>
+        <div className="modal-ft"><button className="btn btn-ghost" onClick={onClose}>Close</button></div>
       </div>
     </div>
   );
@@ -947,7 +1082,7 @@ function ProductsModal({result,options,customProducts,setCustomProducts,notify,o
                 const sol=p.solubility&&g>0?g/(p.solubility*sv*1000):null;
                 return (
                   <tr key={p.id} className={g>0.01?'active':''}>
-                    <td><span className="pt-name">{p.name}</span>{isCustom(p.id)&&<span className="custom-badge">custom</span>}</td>
+                    <td><span className="pt-name">{p.name}</span>{p.kind==='blend'&&<span className="blend-badge">blend</span>}{isCustom(p.id)&&<span className="custom-badge">custom</span>}</td>
                     <td className="pt-brand">{p.brand||'—'}</td>
                     <td><span className={`tank-pill tp-${p.tank.toLowerCase()}`}>{p.tank}</span></td>
                     <td><div className="comp-pills">{Object.entries(p.composition).filter(([,v])=>v>0).map(([k,v])=><span key={k} className="comp-pill">{k}: {(v*100).toFixed(1)}%</span>)}</div></td>
@@ -971,39 +1106,81 @@ function ProductsModal({result,options,customProducts,setCustomProducts,notify,o
   );
 }
 
+const BLEND_LABEL_KEYS = [
+  ['NO3','Nitrate-N'],['NH4','Ammoniacal-N'],['ureaN','Urea-N (ref. only)'],
+  ['P2O5','Phosphate (P₂O₅)'],['K2O','Potash (K₂O)'],
+  ['Ca','Calcium'],['Mg','Magnesium'],['S','Sulfur'],
+  ['Fe','Iron'],['Mn','Manganese'],['Zn','Zinc'],['Cu','Copper'],['B','Boron'],['Mo','Molybdenum'],
+];
+
 function ProductForm({product,isNew,onSave,onClose,units}) {
-  const [p,setP]=useState({...product});
+  const [p,setP]=useState({...EMPTY_PROD,...product,labelAnalysis:{...EMPTY_PROD.labelAnalysis,...product.labelAnalysis}});
   const keys=['NO3','NH4','P','K','Ca','Mg','S','Fe','Mn','Zn','Cu','B','Mo','Si'];
+  const isBlend = p.kind==='blend';
   const set=(k,v)=>setP(prev=>({...prev,[k]:v}));
   const setC=(k,v)=>setP(prev=>({...prev,composition:{...prev.composition,[k]:parseFloat(v)||0}}));
+  const setLabel=(k,v)=>setP(prev=>({...prev,labelAnalysis:{...prev.labelAnalysis,[k]:parseFloat(v)||0}}));
   const total=Object.values(p.composition).reduce((a,b)=>a+(b||0),0);
+
+  const saveProduct = () => {
+    const out = isBlend ? {...p, composition:labelAnalysisToComposition(p.labelAnalysis)} : p;
+    onSave(out);
+  };
+
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-hd"><h2>{isNew?'Add product':'Edit product'}</h2><button className="btn-icon" onClick={onClose}><X size={15}/></button></div>
         <div className="modal-bd">
           <div className="field"><label className="field-label">Product name *</label><input className="input" value={p.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Calcium Nitrate"/></div>
+          <div className="field">
+            <label className="field-label">Type</label>
+            <div className="kind-toggle">
+              <button type="button" className={`kind-btn ${!isBlend?'act':''}`} onClick={()=>set('kind','salt')}>Single salt</button>
+              <button type="button" className={`kind-btn ${isBlend?'act':''}`} onClick={()=>set('kind','blend')}>Premixed blend</button>
+            </div>
+            <span className="field-hint">{isBlend?'Enter numbers straight off the guaranteed-analysis label (e.g. a Peters/Jack’s 15-5-15 bag).':'Enter composition as elemental fractions.'}</span>
+          </div>
           <div className="modal-2col">
             <div className="field"><label className="field-label">Brand</label><input className="input" value={p.brand||''} onChange={e=>set('brand',e.target.value)} placeholder="e.g. Yara"/></div>
             <div className="field"><label className="field-label">Tank</label><select className="input select-input" value={p.tank} onChange={e=>set('tank',e.target.value)}><option value="A">A</option><option value="B">B</option><option value="AB">AB (both)</option></select></div>
           </div>
           <div className="field"><label className="field-label">Solubility ({units.densityUnitLabel} water)</label><input className="input" type="number" step="0.001" value={p.solubility?units.densityToFieldValue(p.solubility):''} onChange={e=>set('solubility',e.target.value===''?null:units.densityFromFieldValue(e.target.value))} placeholder={units.system==='imperial'?'e.g. 2.50':'e.g. 0.30'}/></div>
           <div className="field"><label className="field-label">Bag size ({units.bigMassUnitLabel}, optional)</label><input className="input" type="number" step="0.01" value={p.bagSize?units.bagSizeToFieldValue(p.bagSize):''} onChange={e=>set('bagSize',e.target.value===''?null:units.bagSizeFromFieldValue(e.target.value))} placeholder={units.system==='imperial'?'e.g. 50':'e.g. 22.68'}/><span className="field-hint">As sold/packaged — used to show whole-bag counts in Product Mix</span></div>
-          <div className="modal-sec">Nutrient composition — fraction by elemental weight (e.g. 0.19 = 19%)</div>
-          <div className="modal-grid">
-            {keys.map(k=>(
-              <div key={k} className="mc-row">
-                <label className="mc-lbl">{k}</label>
-                <input type="number" min="0" max="1" step="0.001" className="input" style={{fontSize:12,padding:'5px 7px',textAlign:'right'}} value={p.composition[k]||''} placeholder="0" onChange={e=>setC(k,e.target.value)}/>
-                <span className="mc-pct">{((p.composition[k]||0)*100).toFixed(1)}%</span>
+
+          {isBlend ? (
+            <>
+              <div className="modal-sec">Guaranteed analysis — fraction by weight (e.g. 0.15 = 15%)</div>
+              <div className="modal-grid">
+                {BLEND_LABEL_KEYS.map(([k,label])=>(
+                  <div key={k} className="mc-row">
+                    <label className="mc-lbl" title={label}>{label}</label>
+                    <input type="number" min="0" max="1" step="0.001" className="input" style={{fontSize:12,padding:'5px 7px',textAlign:'right'}} value={p.labelAnalysis[k]||''} placeholder="0" onChange={e=>setLabel(k,e.target.value)}/>
+                    <span className="mc-pct">{((p.labelAnalysis[k]||0)*100).toFixed(1)}%</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className={`modal-sum ${total>1.01?'ms-bad':'ms-ok'}`}>Total: {(total*100).toFixed(1)}% {total>1.01?'⚠ exceeds 100%':total>0.5?'✓':''}</div>
+              <div className="field-hint" style={{marginTop:2}}>P₂O₅ and K₂O convert to elemental P/K automatically (×0.4364, ×0.8301) — everything else on a US guaranteed-analysis label is already elemental. Urea-N isn't modeled separately from ammoniacal-N and is excluded from the ppm/EC math; it's kept here only so your Total N reference matches the bag.</div>
+            </>
+          ) : (
+            <>
+              <div className="modal-sec">Nutrient composition — fraction by elemental weight (e.g. 0.19 = 19%)</div>
+              <div className="modal-grid">
+                {keys.map(k=>(
+                  <div key={k} className="mc-row">
+                    <label className="mc-lbl">{k}</label>
+                    <input type="number" min="0" max="1" step="0.001" className="input" style={{fontSize:12,padding:'5px 7px',textAlign:'right'}} value={p.composition[k]||''} placeholder="0" onChange={e=>setC(k,e.target.value)}/>
+                    <span className="mc-pct">{((p.composition[k]||0)*100).toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+              <div className={`modal-sum ${total>1.01?'ms-bad':'ms-ok'}`}>Total: {(total*100).toFixed(1)}% {total>1.01?'⚠ exceeds 100%':total>0.5?'✓':''}</div>
+            </>
+          )}
         </div>
         <div className="modal-ft">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={()=>p.name&&onSave(p)} disabled={!p.name}>{isNew?'Add product':'Save changes'}</button>
+          <button className="btn btn-primary" onClick={()=>p.name&&saveProduct()} disabled={!p.name}>{isNew?'Add product':'Save changes'}</button>
         </div>
       </div>
     </div>

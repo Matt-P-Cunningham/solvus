@@ -617,6 +617,13 @@ body {
   cursor: pointer; font-family: var(--font);
 }
 .suggest-chip:hover { background: var(--teal-bd); }
+.blend-calc-btn {
+  margin-left: 8px; display: inline-flex; align-items: center; gap: 4px;
+  background: var(--amber-lt); border: 1px solid var(--amber-bd); color: var(--amber-dk);
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+  cursor: pointer; font-family: var(--font); text-transform: uppercase; letter-spacing: .3px;
+}
+.blend-calc-btn:hover { background: var(--amber-bd); }
 
 .tank-msg {
   display: flex; align-items: center; gap: 8px;
@@ -842,6 +849,22 @@ body {
   padding: 1px 5px; border-radius: 3px;
   text-transform: uppercase; letter-spacing: .4px;
 }
+.blend-badge {
+  margin-left: 6px;
+  background: var(--amber-lt); color: var(--amber-dk);
+  font-size: 9px; font-weight: 700;
+  padding: 1px 5px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: .4px;
+}
+
+.kind-toggle { display: flex; gap: 6px; }
+.kind-btn {
+  flex: 1;
+  background: var(--s1); border: 1px solid var(--border); color: var(--t2);
+  font-size: 12.5px; font-weight: 600; padding: 8px; border-radius: var(--r);
+  cursor: pointer; font-family: var(--font); transition: all .12s;
+}
+.kind-btn.act { background: var(--teal-lt); border-color: var(--teal-bd); color: var(--teal-dk); }
 .comp-pills { display: flex; gap: 4px; flex-wrap: wrap; }
 .comp-pill {
   background: var(--s2); border: 1px solid var(--border);
