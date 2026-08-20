@@ -4,12 +4,13 @@ import {
   Leaf, Zap, FlaskConical, BarChart3, Network, Database,
   AlertTriangle, CheckCircle, Download, Save, X, Info,
   SlidersHorizontal, RefreshCw, Plus, Search, Settings,
-  ChevronRight, ChevronLeft, BookOpen, HelpCircle, Trash2
+  ChevronRight, ChevronLeft, BookOpen, HelpCircle, Trash2, GripVertical
 } from 'lucide-react';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import {
   solveRecipe, NUTRIENTS, PRODUCTS, PRESET_RECIPES,
-  LITERATURE_RATIOS, MULDERS_INTERACTIONS, estimateEC, scaleTargetsToEC
+  LITERATURE_RATIOS, MULDERS_INTERACTIONS, estimateEC, scaleTargetsToEC,
+  classifyProduct, checkTankDrop
 } from './engine';
 import { UnitsProvider, useUnits } from './units';
 import './App.css';
@@ -64,6 +65,7 @@ function AppInner() {
   const [targets, setTargets]         = useState({...DEFAULT_TARGETS});
   const [options, setOptions]         = useState({...DEFAULT_OPTIONS});
   const [manualGrams, setManualGrams] = useState({});
+  const [tankOverrides, setTankOverrides] = useState({});
   const [targetEC, setTargetEC]       = useState('');
   const [result, setResult]           = useState(null);
   const [recipeName, setRecipeName]   = useState('My Recipe');
@@ -96,7 +98,7 @@ function AppInner() {
   const loadPreset = key => {
     const p = PRESET_RECIPES[key]; if(!p) return;
     setTargets({...DEFAULT_TARGETS,...p.targets});
-    setManualGrams({}); setActivePreset(key); setRecipeName(key);
+    setManualGrams({}); setTankOverrides({}); setActivePreset(key); setRecipeName(key);
     notify(`Loaded: ${key}`);
   };
   const applyEC = () => {
@@ -131,6 +133,7 @@ function AppInner() {
   };
 
   const p={step,setStep,targets,options,result,recipeName,manualGrams,targetEC,activePreset,units,
+    tankOverrides,setTankOverrides,
     customProducts,savedRecipes,setT,setO,setON,setTargets,setManualGrams,setTargetEC,
     applyEC,setRecipeName,loadPreset,save,exportCSV,setCustomProducts,setSavedRecipes,notify};
 
@@ -155,7 +158,7 @@ function AppInner() {
             <select className="tb-select" onChange={e=>{
               if(!e.target.value) return;
               const r=savedRecipes[e.target.value];
-              if(r){setTargets(r.targets);setOptions(r.options);setManualGrams({});setRecipeName(e.target.value);notify(`Loaded: ${e.target.value}`);}
+              if(r){setTargets(r.targets);setOptions(r.options);setManualGrams({});setTankOverrides({});setRecipeName(e.target.value);notify(`Loaded: ${e.target.value}`);}
             }} value="">
               <option value="">My recipes…</option>
               {Object.keys(savedRecipes).map(k=><option key={k} value={k}>{k}</option>)}
@@ -404,21 +407,106 @@ function NC({n,val,onChange,del}) {
   );
 }
 
-// ─── Step 4: Mix ──────────────────────────────────────────────
-function StepMix({result,options,manualGrams,setManualGrams,customProducts,setStep,notify,units}) {
-  const hasOv=Object.keys(manualGrams).length>0;
-  const all=[...PRODUCTS,...customProducts];
+// ─── One draggable product row, shared by all three tank zones ────────────
+function MixRow({p,auto,ov,ovField,sol,sc,units,caution,suggestedZone,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onReset}) {
+  return (
+    <tr draggable className={`mix-row ${sol&&sol>0.8?'row-warn':''}`}
+      onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <td>
+        <div className="td-pn"><GripVertical size={11} className="drag-handle"/>{p.name}
+          {caution && <span className="caution-dot" title={caution}>⚠</span>}
+        </div>
+        <div className="td-pb">{p.brand}</div>
+        {suggestedZone && (
+          <button className="suggest-chip" onClick={onSuggestionClick}>Suggested: Tank {suggestedZone} (lighter)</button>
+        )}
+      </td>
+      <td className="r td-dim">{auto>0.01?units.massToFieldValue(auto).toFixed(1):'—'}</td>
+      <td style={{textAlign:'right',paddingRight:6}}>
+        <div className="ov-cell">
+          <input type="number" min="0" step="0.1"
+            className={`g-inp ${ov!==''?'ov':''}`}
+            placeholder={auto>0?units.massToFieldValue(auto).toFixed(1):'0'}
+            value={ovField}
+            onChange={onOverrideChange}
+          />
+          {ov!==''&&<button className="ov-reset" title={`Reset ${p.name} to calculated value`} onClick={onReset}><RefreshCw size={11}/></button>}
+        </div>
+      </td>
+      <td className={`r ${sc}`}>{sol!==null?(sol*100).toFixed(1)+'%':'—'}</td>
+    </tr>
+  );
+}
 
-  const renderTank=(label,cls,prods)=>{
-    const rows=prods.filter(p=>(result?.gramsInStock[p.id]||0)>0.01||manualGrams[p.id]!==undefined);
-    if(!rows.length) return null;
-    const total=rows.reduce((s,p)=>s+(parseFloat(manualGrams[p.id]??result?.gramsInStock[p.id]??0)),0);
+// ─── Step 4: Mix ──────────────────────────────────────────────
+function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTankOverrides,customProducts,setStep,notify,units}) {
+  const hasOv=Object.keys(manualGrams).length>0;
+  const hasTankOv=Object.keys(tankOverrides).length>0;
+  const all=[...PRODUCTS,...customProducts];
+  const [dragOverZone,setDragOverZone]=useState(null);
+  const [tankMsg,setTankMsg]=useState(null);
+
+  const zoneOf = p => { const eff = tankOverrides[p.id] ?? p.tank; return eff==='AB' ? 'FLEX' : eff; };
+  const massOf = p => parseFloat(manualGrams[p.id] ?? result?.gramsInStock[p.id] ?? 0) || 0;
+  const shownIn = (p,zone) => zoneOf(p)===zone && (massOf(p)>0.01 || manualGrams[p.id]!==undefined);
+
+  const totalA = all.filter(p=>shownIn(p,'A')).reduce((s,p)=>s+massOf(p),0);
+  const totalB = all.filter(p=>shownIn(p,'B')).reduce((s,p)=>s+massOf(p),0);
+  const combined = totalA+totalB;
+  const pctA = combined>0 ? (totalA/combined*100) : 50;
+
+  const handleDrop = (productId,destZone) => {
+    setDragOverZone(null);
+    const product = all.find(p=>p.id===productId);
+    if(!product || zoneOf(product)===destZone) return;
+
+    if(destZone==='FLEX'){
+      const cls = classifyProduct(product.composition);
+      if(cls.group!=='FLEXIBLE_AB'){
+        setTankMsg({type:'blocked', text:`${product.name} isn't chemically flexible — its composition puts it firmly in one compatibility group, not the either-tank zone.`});
+        return;
+      }
+      setTankOverrides(prev=>({...prev,[productId]:'AB'}));
+      setTankMsg(null);
+      return;
+    }
+
+    const destProducts = all.filter(p=>p.id!==productId && zoneOf(p)===destZone);
+    const check = checkTankDrop(product, destZone, destProducts);
+    if(!check.allowed){
+      setTankMsg(check.requiresConfirm
+        ? {type:'confirm', text:check.reason, pending:{productId,destZone}}
+        : {type:'blocked', text:check.reason});
+      return;
+    }
+    setTankOverrides(prev=>({...prev,[productId]:destZone}));
+    setTankMsg(check.caution ? {type:'caution', text:check.caution} : null);
+  };
+
+  const confirmPendingDrop = () => {
+    if(!tankMsg?.pending) return;
+    setTankOverrides(prev=>({...prev,[tankMsg.pending.productId]:tankMsg.pending.destZone}));
+    setTankMsg(null);
+  };
+
+  const renderZone=(zoneKey,label,cls,isFlex)=>{
+    const rows=all.filter(p=>shownIn(p,zoneKey));
+    const total=rows.reduce((s,p)=>s+massOf(p),0);
     return (
-      <div key={label}>
+      <div key={zoneKey}
+        className={`tank-zone ${dragOverZone===zoneKey?'zone-dragover':''}`}
+        onDragOver={e=>{e.preventDefault();}}
+        onDragEnter={e=>{e.preventDefault();setDragOverZone(zoneKey);}}
+        onDragLeave={()=>setDragOverZone(z=>z===zoneKey?null:z)}
+        onDrop={e=>{e.preventDefault();handleDrop(e.dataTransfer.getData('text/plain'),zoneKey);}}>
         <div className="tank-head">
           <div className={`tank-pill ${cls}`}>{label}</div>
+          {isFlex && <span className="tank-flex-note">either tank — not yet committed</span>}
           <div className="tank-kg">{total>0?units.formatMass(total)+' total':''}</div>
         </div>
+        {!rows.length ? (
+          <div className="card zone-empty">Drag a compatible product here</div>
+        ) : (
         <div className="card" style={{overflow:'hidden',marginBottom:16}}>
           <div style={{overflowX:'auto'}}>
           <table className="tbl" style={{minWidth:540}}>
@@ -431,34 +519,24 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
                 const sol=p.solubility?g/(p.solubility*options.stockVolumeLiters*1000):null;
                 const sc=sol&&sol>1?'sol-err':sol&&sol>0.8?'sol-warn':'sol-ok';
                 const ovField=ov!==''?units.massToFieldValue(parseFloat(ov)||0):'';
+                const caution = isFlex ? null : classifyProduct(p.composition).caution;
+                const suggestedZone = isFlex ? (totalA<=totalB?'A':'B') : null;
                 return (
-                  <tr key={p.id} className={sol&&sol>0.8?'row-warn':''}>
-                    <td><div className="td-pn">{p.name}</div><div className="td-pb">{p.brand}</div></td>
-                    <td className="r td-dim">{auto>0.01?units.massToFieldValue(auto).toFixed(1):'—'}</td>
-                    <td style={{textAlign:'right',paddingRight:6}}>
-                      <div className="ov-cell">
-                        <input type="number" min="0" step="0.1"
-                          className={`g-inp ${ov!==''?'ov':''}`}
-                          placeholder={auto>0?units.massToFieldValue(auto).toFixed(1):'0'}
-                          value={ovField}
-                          onChange={e=>{const v=e.target.value; setManualGrams(prev=>{const next={...prev};if(v==='')delete next[p.id];else next[p.id]=String(units.massFromFieldValue(v));return next;});}}
-                        />
-                        {ov!==''&&(
-                          <button className="ov-reset" title={`Reset ${p.name} to calculated value`}
-                            onClick={()=>setManualGrams(prev=>{const next={...prev};delete next[p.id];return next;})}>
-                            <RefreshCw size={11}/>
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className={`r ${sc}`}>{sol!==null?(sol*100).toFixed(1)+'%':'—'}</td>
-                  </tr>
+                  <MixRow key={p.id} p={p} auto={auto} ov={ov} ovField={ovField} sol={sol} sc={sc} units={units} caution={caution}
+                    suggestedZone={suggestedZone}
+                    onSuggestionClick={()=>handleDrop(p.id,suggestedZone)}
+                    onDragStart={e=>e.dataTransfer.setData('text/plain',p.id)}
+                    onDragEnd={()=>setDragOverZone(null)}
+                    onOverrideChange={e=>{const v=e.target.value; setManualGrams(prev=>{const next={...prev};if(v==='')delete next[p.id];else next[p.id]=String(units.massFromFieldValue(v));return next;});}}
+                    onReset={()=>setManualGrams(prev=>{const next={...prev};delete next[p.id];return next;})}
+                  />
                 );
               })}
             </tbody>
           </table>
           </div>
         </div>
+        )}
       </div>
     );
   };
@@ -467,19 +545,47 @@ function StepMix({result,options,manualGrams,setManualGrams,customProducts,setSt
     <div>
       <div className="page-header">
         <div className="page-title">Product mix</div>
-        <div className="page-desc">Calculated grams for your stock solution. Override any value to fine-tune — overridden entries appear in purple and recalculate delivered PPM instantly.</div>
+        <div className="page-desc">Calculated grams for your stock solution. Drag a product between Tank A, Tank B, and the flexible zone to reassign it — chemically incompatible drops are blocked. Override any gram value to fine-tune.</div>
       </div>
-      <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'center'}}>
+      <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'center',flexWrap:'wrap'}}>
         {hasOv&&<button className="btn btn-ghost btn-sm" onClick={()=>setManualGrams({})}><RefreshCw size={12}/> Reset overrides</button>}
+        {hasTankOv&&<button className="btn btn-ghost btn-sm" onClick={()=>setTankOverrides({})}><RefreshCw size={12}/> Reset tank assignments</button>}
         <span style={{fontSize:12,color:'var(--t3)'}}>Stock: {units.formatVolume(options.stockVolumeLiters)} at {options.concentrationFactor}× — supply: {units.formatVolume(options.supplyVolumeLiters)}</span>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
-        <div>
-          {renderTank('Tank A','tp-a',all.filter(p=>p.tank==='A'))}
-          {renderTank('Tank AB','tp-ab',all.filter(p=>p.tank==='AB'))}
+
+      {tankMsg && (
+        <div className={`tank-msg tm-${tankMsg.type}`}>
+          <AlertTriangle size={14}/>
+          <span className="tank-msg-text">{tankMsg.text}</span>
+          {tankMsg.type==='confirm' ? (
+            <div className="tank-msg-actions">
+              <button className="btn btn-ghost btn-sm" onClick={()=>setTankMsg(null)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={confirmPendingDrop}>Override and place anyway</button>
+            </div>
+          ) : (
+            <button className="btn-icon" onClick={()=>setTankMsg(null)}><X size={13}/></button>
+          )}
         </div>
-        <div>{renderTank('Tank B','tp-b',all.filter(p=>p.tank==='B'))}</div>
+      )}
+
+      <div className="balance-card">
+        <div className="balance-hd">Tank balance <span className="balance-sub">— even dry mass keeps injector draw rate consistent between tanks</span></div>
+        <div className="balance-bar">
+          <div className="balance-fill-a" style={{width:`${pctA}%`}}/>
+          <div className="balance-fill-b" style={{width:`${100-pctA}%`}}/>
+        </div>
+        <div className="balance-labels">
+          <span><span className="bl-dot bl-a"/>Tank A — {units.formatMass(totalA)} ({combined>0?pctA.toFixed(0):'—'}%)</span>
+          <span><span className="bl-dot bl-b"/>Tank B — {units.formatMass(totalB)} ({combined>0?(100-pctA).toFixed(0):'—'}%)</span>
+        </div>
       </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+        <div>{renderZone('A','Tank A','tp-a',false)}</div>
+        <div>{renderZone('B','Tank B','tp-b',false)}</div>
+      </div>
+      {renderZone('FLEX','AB — Flexible','tp-ab',true)}
+
       <div className="step-footer">
         <button className="btn btn-ghost" onClick={()=>setStep(2)}><ChevronLeft size={14}/> Back</button>
         <span className="step-footer-info">Live summary updates on the right as you adjust values</span>

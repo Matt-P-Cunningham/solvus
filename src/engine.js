@@ -79,7 +79,7 @@ export const PRODUCTS = [
     notes: '38.4% K, 13.5% NO₃-N. MW=101.1',
   },
   {
-    id: 'magnesium_nitrate', name: 'Magnesium Nitrate', brand: 'Magnisol', tank: 'A',
+    id: 'magnesium_nitrate', name: 'Magnesium Nitrate', brand: 'Magnisol', tank: 'AB',
     solubility: 2.265,
     composition: { Mg: 0.0960, NO3: 0.1100 },
     formula: 'Mg(NO₃)₂·6H₂O',
@@ -177,6 +177,103 @@ export const PRODUCTS = [
     notes: '24.7% Si, 26.6% K. Si is non-ionic — no EC contribution.',
   },
 ];
+
+// ─── Tank compatibility rule engine ────────────────────────────────────────
+// Classifies each product into a stock-tank compatibility group from its
+// existing ion-composition data (composition{} above) — no per-product
+// manual tagging required.
+//
+// Corroborated by two independent university-extension sources and this
+// project's own historical A/B product assignments (potassium nitrate and
+// magnesium nitrate carry no Ca/S/P/Si/micronutrients and are treated as
+// flexible, matching their dual A/B listing in the source workbook):
+//   Penn State Extension — Hydroponics Systems: Nutrient Solution Programs
+//     and Recipes: https://extension.psu.edu/hydroponics-systems-nutrient-solution-programs-and-recipes
+//   e-GRO — Fertilizer Calculation Basics for Hydroponics:
+//     https://e-gro.org/pdf/E305.pdf
+//   UKY Cooperative Extension — Jar Test: Determining Fertilizer Solubility
+//     and Compatibility
+//
+// Rule 1 (hard block): calcium must never share a tank with sulfate or
+// phosphate. Concentrated Ca + SO4 forms low-solubility gypsum; Ca + PO4
+// forms low-solubility calcium phosphate.
+//
+// Rule 1b (hard block, independently verified — NOT from the extension
+// sources above): calcium must never share a tank with concentrated
+// silicate either. Multiple independent hydroponics-supplier/grower
+// references describe calcium nitrate reacting immediately on contact with
+// concentrated potassium silicate, precipitating both the calcium and the
+// silica. This project's Potassium Silicate product carries no Ca/S/P, so
+// without this rule it would fall through to UNCLASSIFIED rather than being
+// flagged as a Ca conflict — silicate is folded into the same hard-conflict
+// group as sulfate/phosphate.
+//   https://mistculture.com/calcium-nitrate-potassium-silicate-mixing/
+//   https://www.haifa-group.com/haifa-blog/mastering-tank-mixes
+//
+// Rule 2: nitrate/ammonium/potassium/magnesium-only salts (no Ca/S/P/Si/
+// micronutrients) default to the flexible AB bucket.
+//
+// Genuine unresolved conflict (surfaced, not silently resolved): PSU/e-GRO
+// and this project's own product history place iron chelate with calcium
+// nitrate in Tank A. UKY's jar-test guide separately lists "calcium and
+// iron combinations may precipitate" with no chelated/free distinction.
+// Chelated Fe defaults to the Ca group (matching PSU/e-GRO/history) but
+// carries a non-blocking caution rather than resolving the disagreement.
+export const MICRO_NON_FE_KEYS = ['Mn', 'Zn', 'Cu', 'B', 'Mo'];
+export const FLEXIBLE_ION_KEYS = ['NO3', 'NH4', 'K', 'Mg'];
+
+export const FE_CA_CAUTION =
+  "Sources disagree on Ca + Fe chelate compatibility — PSU/e-GRO extension guidance and this app's own product history place it with calcium; UKY extension flags a possible precipitation risk. If unsure, run a jar test.";
+
+export const JAR_TEST_MSG =
+  'No compatibility rule could be determined for this product — verify manually with a jar test before assigning it to a tank: mix at target concentration in a clear jar, cap, let stand 12–24 hours, and check for cloudiness or precipitate.';
+
+// Returns { group, tank, caution?, reason? } for a product's composition.
+// group: 'CA_GROUP' | 'SULFATE_PHOSPHATE_GROUP' | 'FLEXIBLE_AB' | 'UNCLASSIFIED'
+export function classifyProduct(composition = {}) {
+  const has = k => (composition[k] || 0) > 0;
+  const hasCa = has('Ca');
+  const hasFe = has('Fe');
+  const conflictsWithCa = has('S') || has('P') || has('Si') || MICRO_NON_FE_KEYS.some(has);
+
+  if (hasCa && conflictsWithCa) {
+    return {
+      group: 'UNCLASSIFIED', tank: null,
+      reason: 'Composition contains both calcium and sulfate/phosphate/silicate/micronutrient ions — this looks like a data error. ' + JAR_TEST_MSG,
+    };
+  }
+  if (hasCa) return { group: 'CA_GROUP', tank: 'A' };
+  if (hasFe) return { group: 'CA_GROUP', tank: 'A', caution: FE_CA_CAUTION };
+  if (conflictsWithCa) return { group: 'SULFATE_PHOSPHATE_GROUP', tank: 'B' };
+  if (FLEXIBLE_ION_KEYS.some(has)) return { group: 'FLEXIBLE_AB', tank: 'AB' };
+  return { group: 'UNCLASSIFIED', tank: null, reason: JAR_TEST_MSG };
+}
+
+// Validates a proposed drop of `movingProduct` into `destTank` ('A' | 'B'),
+// given the products currently effectively assigned there.
+// Returns { allowed, requiresConfirm, reason?, caution? }.
+export function checkTankDrop(movingProduct, destTank, destProducts) {
+  const moving = classifyProduct(movingProduct.composition);
+
+  if (moving.group === 'UNCLASSIFIED') {
+    return { allowed: false, requiresConfirm: true, reason: moving.reason };
+  }
+
+  const opposingGroup = moving.group === 'CA_GROUP' ? 'SULFATE_PHOSPHATE_GROUP'
+    : moving.group === 'SULFATE_PHOSPHATE_GROUP' ? 'CA_GROUP' : null;
+
+  if (opposingGroup) {
+    const conflict = destProducts.find(p => classifyProduct(p.composition).group === opposingGroup);
+    if (conflict) {
+      return {
+        allowed: false, requiresConfirm: false,
+        reason: `Calcium products can't share a tank with sulfate/phosphate/silicate products — risk of gypsum/calcium-phosphate/calcium-silicate precipitation (conflicts with ${conflict.name}).`,
+      };
+    }
+  }
+
+  return { allowed: true, requiresConfirm: false, caution: moving.caution };
+}
 
 // ─── Scientifically validated crop presets ────────────────────────────────────
 // Sources: Sonneveld & Voogt (2009), Resh (2012), Hoagland & Arnon (1938), peer-reviewed crop trials
