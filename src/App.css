@@ -492,6 +492,12 @@ body {
   text-transform: uppercase; letter-spacing: .5px;
   padding: 3px 9px; border-radius: 20px;
 }
+.tank-pill-lg {
+  font-size: 15px; font-weight: 800;
+  letter-spacing: .6px;
+  padding: 6px 16px; border-radius: 8px;
+  border: 1.5px solid currentColor;
+}
 .tp-a  { background: var(--red-lt);  color: var(--red); }
 .tp-b  { background: var(--blue-lt); color: var(--blue); }
 .tp-ab { background: var(--teal-lt); color: var(--teal-dk); }
@@ -590,6 +596,19 @@ body {
 .mix-row { cursor: grab; }
 .mix-row:active { cursor: grabbing; }
 .drag-handle { color: var(--t4); margin-right: 4px; vertical-align: -1px; }
+.mix-check { margin-right: 7px; width: 14px; height: 14px; accent-color: var(--teal); cursor: pointer; vertical-align: -2px; }
+.mix-row.row-mixed { opacity: .5; }
+.mix-row.row-mixed .td-pn { text-decoration: line-through; text-decoration-color: var(--t3); }
+
+.mix-progress {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 600; color: var(--t2);
+  background: var(--s1); border: 1px solid var(--border); border-radius: 20px;
+  padding: 4px 10px;
+}
+.mix-progress svg { color: var(--t3); }
+.mix-progress.done { background: var(--green-lt); border-color: var(--green-bd); color: var(--green); }
+.mix-progress.done svg { color: var(--green); }
 .caution-dot { margin-left: 5px; font-size: 11px; cursor: help; }
 .suggest-chip {
   margin-top: 3px; display: inline-block;

@@ -77,6 +77,7 @@ function AppInner() {
   const [options, setOptions]         = useState({...DEFAULT_OPTIONS});
   const [manualGrams, setManualGrams] = useState({});
   const [tankOverrides, setTankOverrides] = useState({});
+  const [mixedProducts, setMixedProducts] = useState({});
   const [targetEC, setTargetEC]       = useState('');
   const [result, setResult]           = useState(null);
   const [recipeName, setRecipeName]   = useState('My Recipe');
@@ -109,7 +110,7 @@ function AppInner() {
   const loadPreset = key => {
     const p = PRESET_RECIPES[key]; if(!p) return;
     setTargets({...DEFAULT_TARGETS,...p.targets});
-    setManualGrams({}); setTankOverrides({}); setActivePreset(key); setRecipeName(key);
+    setManualGrams({}); setTankOverrides({}); setMixedProducts({}); setActivePreset(key); setRecipeName(key);
     notify(`Loaded: ${key}`);
   };
   const applyEC = () => {
@@ -144,7 +145,7 @@ function AppInner() {
   };
 
   const p={step,setStep,targets,options,result,recipeName,manualGrams,targetEC,activePreset,units,
-    tankOverrides,setTankOverrides,
+    tankOverrides,setTankOverrides,mixedProducts,setMixedProducts,
     customProducts,savedRecipes,setT,setO,setON,setTargets,setManualGrams,setTargetEC,
     applyEC,setRecipeName,loadPreset,save,exportCSV,setCustomProducts,setSavedRecipes,notify};
 
@@ -169,7 +170,7 @@ function AppInner() {
             <select className="tb-select" onChange={e=>{
               if(!e.target.value) return;
               const r=savedRecipes[e.target.value];
-              if(r){setTargets(r.targets);setOptions(r.options);setManualGrams({});setTankOverrides({});setRecipeName(e.target.value);notify(`Loaded: ${e.target.value}`);}
+              if(r){setTargets(r.targets);setOptions(r.options);setManualGrams({});setTankOverrides({});setMixedProducts({});setRecipeName(e.target.value);notify(`Loaded: ${e.target.value}`);}
             }} value="">
               <option value="">My recipes…</option>
               {Object.keys(savedRecipes).map(k=><option key={k} value={k}>{k}</option>)}
@@ -429,12 +430,14 @@ function BagMathLabel({bagMath,units}) {
 }
 
 // ─── One draggable product row, shared by all three tank zones ────────────
-function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZone,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onOverrideBlur,onBump,onReset}) {
+function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZone,isMixed,onToggleMixed,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onOverrideBlur,onBump,onReset}) {
   return (
-    <tr draggable className={`mix-row ${sol&&sol>0.8?'row-warn':''}`}
+    <tr draggable className={`mix-row ${sol&&sol>0.8?'row-warn':''} ${isMixed?'row-mixed':''}`}
       onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <td>
-        <div className="td-pn"><GripVertical size={11} className="drag-handle"/>{p.name}
+        <div className="td-pn">
+          <input type="checkbox" className="mix-check" checked={!!isMixed} onChange={onToggleMixed} title="Mark as already added to the tank"/>
+          <GripVertical size={11} className="drag-handle"/>{p.name}
           {caution && <span className="caution-dot" title={caution}>⚠</span>}
         </div>
         <div className="td-pb">{p.brand}</div>
@@ -473,10 +476,12 @@ function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZo
 }
 
 // ─── Step 4: Mix ──────────────────────────────────────────────
-function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTankOverrides,customProducts,setStep,notify,units}) {
+function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTankOverrides,mixedProducts,setMixedProducts,customProducts,setStep,notify,units}) {
   const hasOv=Object.keys(manualGrams).length>0;
   const hasTankOv=Object.keys(tankOverrides).length>0;
+  const hasMixed=Object.keys(mixedProducts).length>0;
   const all=mergeProducts(customProducts);
+  const toggleMixed = id => setMixedProducts(prev=>{const next={...prev}; if(next[id]) delete next[id]; else next[id]=true; return next;});
   const [dragOverZone,setDragOverZone]=useState(null);
   const [tankMsg,setTankMsg]=useState(null);
 
@@ -488,6 +493,9 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
   const totalB = all.filter(p=>shownIn(p,'B')).reduce((s,p)=>s+massOf(p),0);
   const combined = totalA+totalB;
   const pctA = combined>0 ? (totalA/combined*100) : 50;
+
+  const shownProducts = all.filter(p=>shownIn(p,'A')||shownIn(p,'B')||shownIn(p,'FLEX'));
+  const mixedCount = shownProducts.filter(p=>mixedProducts[p.id]).length;
 
   const handleDrop = (productId,destZone) => {
     setDragOverZone(null);
@@ -570,7 +578,7 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
         onDragLeave={()=>setDragOverZone(z=>z===zoneKey?null:z)}
         onDrop={e=>{e.preventDefault();handleDrop(e.dataTransfer.getData('text/plain'),zoneKey);}}>
         <div className="tank-head">
-          <div className={`tank-pill ${cls}`}>{label}</div>
+          <div className={`tank-pill tank-pill-lg ${cls}`}>{label}</div>
           {isFlex && <span className="tank-flex-note">either tank — not yet committed</span>}
           <div className="tank-kg">{total>0?units.formatMass(total)+' total':''}</div>
         </div>
@@ -596,6 +604,7 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
                 return (
                   <MixRow key={p.id} p={p} auto={auto} ov={ov} ovField={ovField} sol={sol} sc={sc} units={units} caution={caution} bagMath={bagMath}
                     step={tier.step} suggestedZone={suggestedZone}
+                    isMixed={mixedProducts[p.id]} onToggleMixed={()=>toggleMixed(p.id)}
                     onSuggestionClick={()=>handleDrop(p.id,suggestedZone)}
                     onDragStart={e=>e.dataTransfer.setData('text/plain',p.id)}
                     onDragEnd={()=>setDragOverZone(null)}
@@ -624,6 +633,12 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
       <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'center',flexWrap:'wrap'}}>
         {hasOv&&<button className="btn btn-ghost btn-sm" onClick={()=>setManualGrams({})}><RefreshCw size={12}/> Reset overrides</button>}
         {hasTankOv&&<button className="btn btn-ghost btn-sm" onClick={()=>setTankOverrides({})}><RefreshCw size={12}/> Reset tank assignments</button>}
+        {hasMixed&&<button className="btn btn-ghost btn-sm" onClick={()=>setMixedProducts({})}><RefreshCw size={12}/> Reset checklist</button>}
+        {shownProducts.length>0&&(
+          <span className={`mix-progress ${mixedCount===shownProducts.length?'done':''}`}>
+            <CheckCircle size={12}/> {mixedCount} / {shownProducts.length} added
+          </span>
+        )}
         <span style={{fontSize:12,color:'var(--t3)'}}>Stock: {units.formatVolume(options.stockVolumeLiters)} at {options.concentrationFactor}× — supply: {units.formatVolume(options.supplyVolumeLiters)}</span>
       </div>
 
