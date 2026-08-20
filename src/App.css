@@ -526,13 +526,11 @@ body {
 .td-pb  { font-size: 11px; color: var(--t3); }
 
 .g-inp {
-  flex: 1;
-  min-width: 90px;
-  max-width: 150px;
+  width: 100%;
   background: var(--s1);
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 4px 20px 4px 8px;
   font-size: 12.5px;
   color: var(--t0);
   text-align: right;
@@ -541,8 +539,25 @@ body {
 }
 .g-inp:focus { outline: none; border-color: var(--teal); background: var(--surface); }
 .g-inp.ov { background: var(--purp-lt); border-color: var(--purp-bd); color: var(--purp); font-weight: 600; }
+/* Custom stepper buttons replace the native spinner — the native one always
+   steps from 0 (the field's real value while empty/placeholder-only) rather
+   than the calculated dose, and its fixed step produces float-noise digits. */
+.g-inp::-webkit-inner-spin-button, .g-inp::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.g-inp[type=number] { -moz-appearance: textfield; }
 
 .ov-cell { display: flex; align-items: center; justify-content: flex-end; gap: 4px; width: 100%; }
+.stepper-wrap { position: relative; flex: 1; min-width: 90px; max-width: 150px; }
+.stepper-btns {
+  position: absolute; top: 1px; right: 1px; bottom: 1px;
+  display: flex; flex-direction: column; justify-content: center;
+  border-left: 1px solid var(--border);
+}
+.stepper-btn {
+  background: transparent; border: none; color: var(--t3); cursor: pointer;
+  padding: 0 3px; height: 50%; display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.stepper-btn:hover { color: var(--teal); background: var(--s2); }
 .ov-reset {
   background: transparent;
   border: none;

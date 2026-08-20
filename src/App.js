@@ -4,7 +4,7 @@ import {
   Leaf, Zap, FlaskConical, BarChart3, Network, Database,
   AlertTriangle, CheckCircle, Download, Save, X, Info,
   SlidersHorizontal, RefreshCw, Plus, Search, Settings,
-  ChevronRight, ChevronLeft, BookOpen, HelpCircle, Trash2, GripVertical
+  ChevronRight, ChevronLeft, ChevronUp, ChevronDown, BookOpen, HelpCircle, Trash2, GripVertical
 } from 'lucide-react';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import {
@@ -429,7 +429,7 @@ function BagMathLabel({bagMath,units}) {
 }
 
 // ─── One draggable product row, shared by all three tank zones ────────────
-function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,suggestedZone,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onReset}) {
+function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,step,suggestedZone,onSuggestionClick,onDragStart,onDragEnd,onOverrideChange,onOverrideBlur,onBump,onReset}) {
   return (
     <tr draggable className={`mix-row ${sol&&sol>0.8?'row-warn':''}`}
       onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -448,12 +448,19 @@ function MixRow({p,auto,ov,ovField,sol,sc,units,caution,bagMath,suggestedZone,on
       </td>
       <td style={{textAlign:'right',paddingRight:6}}>
         <div className="ov-cell">
-          <input type="number" min="0" step="0.1"
-            className={`g-inp ${ov!==''?'ov':''}`}
-            placeholder={auto>0?units.massToFieldValue(auto).toFixed(1):'0'}
-            value={ovField}
-            onChange={onOverrideChange}
-          />
+          <div className="stepper-wrap">
+            <input type="number" min="0" step={step}
+              className={`g-inp ${ov!==''?'ov':''}`}
+              placeholder={auto>0?units.massToFieldValue(auto).toFixed(1):'0'}
+              value={ovField}
+              onChange={onOverrideChange}
+              onBlur={onOverrideBlur}
+            />
+            <div className="stepper-btns">
+              <button type="button" className="stepper-btn" tabIndex={-1} title="Increase" onClick={()=>onBump(1)}><ChevronUp size={9}/></button>
+              <button type="button" className="stepper-btn" tabIndex={-1} title="Decrease" onClick={()=>onBump(-1)}><ChevronDown size={9}/></button>
+            </div>
+          </div>
           {ov!==''&&<button className="ov-reset" title={`Reset ${p.name} to calculated value`} onClick={onReset}><RefreshCw size={11}/></button>}
         </div>
       </td>
@@ -513,6 +520,42 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
     setTankMsg(null);
   };
 
+  // Practical manual-measurement step size, scaled to the calculated dose's
+  // own magnitude (in whatever unit is currently displayed) — nobody
+  // measures 0.1g increments on a 400g dose, but micro-doses genuinely need
+  // decimal precision. Never exceeds 2 decimal places.
+  const stepTierFor = displayValue => {
+    const a = Math.abs(displayValue);
+    if (a >= 100) return { step: 5,    precision: 0 };
+    if (a >= 10)  return { step: 1,    precision: 0 };
+    if (a >= 1)   return { step: 0.1,  precision: 1 };
+    return          { step: 0.01, precision: 2 };
+  };
+  const roundTo = (v,p) => Math.round(v * 10**p) / 10**p;
+
+  const setOverrideDisplay = (p,displayValue,precision) => {
+    const grams = Math.max(0, units.massFromFieldValue(roundTo(displayValue,precision)));
+    setManualGrams(prev=>({...prev,[p.id]:String(grams)}));
+  };
+
+  // First bump from the calculated value snaps to the nearest step boundary
+  // in the direction of travel (e.g. 400.1 -> increase -> 405, decrease ->
+  // 400); once overridden, each further click moves by a full step.
+  const bumpOverride = (p,auto,ov,direction) => {
+    const displayAuto = units.massToFieldValue(auto);
+    const {step,precision} = stepTierFor(displayAuto);
+    const hasOverride = ov !== '';
+    const base = hasOverride ? units.massToFieldValue(parseFloat(ov)||0) : displayAuto;
+    let next;
+    if (!hasOverride) {
+      next = direction>0 ? Math.ceil(base/step)*step : Math.floor(base/step)*step;
+      if (Math.abs(next-base) < step/1000) next = base + direction*step;
+    } else {
+      next = base + direction*step;
+    }
+    setOverrideDisplay(p, next, precision);
+  };
+
   const renderZone=(zoneKey,label,cls,isFlex)=>{
     const rows=all.filter(p=>shownIn(p,zoneKey));
     const total=rows.reduce((s,p)=>s+massOf(p),0);
@@ -542,17 +585,20 @@ function StepMix({result,options,manualGrams,setManualGrams,tankOverrides,setTan
                 const g=ov!==''?parseFloat(ov)||0:auto;
                 const sol=p.solubility?g/(p.solubility*options.stockVolumeLiters*1000):null;
                 const sc=sol&&sol>1?'sol-err':sol&&sol>0.8?'sol-warn':'sol-ok';
-                const ovField=ov!==''?units.massToFieldValue(parseFloat(ov)||0):'';
+                const tier = stepTierFor(units.massToFieldValue(auto));
+                const ovField=ov!==''?roundTo(units.massToFieldValue(parseFloat(ov)||0),tier.precision).toFixed(tier.precision):'';
                 const caution = isFlex ? null : classifyProduct(p.composition).caution;
                 const suggestedZone = isFlex ? (totalA<=totalB?'A':'B') : null;
                 const bagMath = p.bagSize ? computeBagMath(g, p.bagSize) : null;
                 return (
                   <MixRow key={p.id} p={p} auto={auto} ov={ov} ovField={ovField} sol={sol} sc={sc} units={units} caution={caution} bagMath={bagMath}
-                    suggestedZone={suggestedZone}
+                    step={tier.step} suggestedZone={suggestedZone}
                     onSuggestionClick={()=>handleDrop(p.id,suggestedZone)}
                     onDragStart={e=>e.dataTransfer.setData('text/plain',p.id)}
                     onDragEnd={()=>setDragOverZone(null)}
                     onOverrideChange={e=>{const v=e.target.value; setManualGrams(prev=>{const next={...prev};if(v==='')delete next[p.id];else next[p.id]=String(units.massFromFieldValue(v));return next;});}}
+                    onOverrideBlur={e=>{if(e.target.value==='')return; setOverrideDisplay(p,parseFloat(e.target.value)||0,tier.precision);}}
+                    onBump={direction=>bumpOverride(p,auto,ov,direction)}
                     onReset={()=>setManualGrams(prev=>{const next={...prev};delete next[p.id];return next;})}
                   />
                 );
