@@ -1010,7 +1010,7 @@ function LivePanel({result,targets}) {
 
       <div>
         <div className="lp-head">Delivered</div>
-        {[['Total N',result.totalN,1,'ppm'],['NO₃-N',result.deliveredPPM.NO3,1,'ppm'],['K',result.deliveredPPM.K,1,'ppm'],['Ca',result.deliveredPPM.Ca,1,'ppm'],['Mg',result.deliveredPPM.Mg,1,'ppm'],['P',result.deliveredPPM.P,1,'ppm'],['Fe',result.deliveredPPM.Fe,2,'ppm']].map(([l,v,d,u])=>(
+        {[['Total N',result.totalN,1,'ppm'],['NO₃-N',result.deliveredPPM.NO3,1,'ppm'],['NH₄-N',result.deliveredPPM.NH4,1,'ppm'],['K',result.deliveredPPM.K,1,'ppm'],['Ca',result.deliveredPPM.Ca,1,'ppm'],['Mg',result.deliveredPPM.Mg,1,'ppm'],['P',result.deliveredPPM.P,1,'ppm'],['Fe',result.deliveredPPM.Fe,2,'ppm']].map(([l,v,d,u])=>(
           <div key={l} className="lp-row"><span className="lp-row-lbl">{l}</span><span className="lp-row-val">{f(v,d)} {u}</span></div>
         ))}
       </div>
